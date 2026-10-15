@@ -188,9 +188,9 @@ Suggested fields:
 | Field | Type | Notes |
 |---|---|---|
 | `id` | string | e.g. `training-mode-v1` |
-| `durationSeconds` | number | Fixed at `600` for v1 |
-| `botDeathSchedule` | number[] | `[1, 31, 61, 91, 121, 151]` |
-| `timePenaltyConfig` | json | Tunable scoring penalty curve |
+| `durationSeconds` | number | Fixed at `300` for v1 |
+| `botDeathSchedule` | number[] | `[5, 10, 15, 20, 25]` |
+| `timePenaltyPointsPerSecond` | number | Tunable linear score deduction; placeholder starts at 25 |
 | `rankThresholds` | json | Placeholder medal/tier thresholds |
 | `lootGenerationMode` | string | `randomized_from_pool` |
 
@@ -644,11 +644,12 @@ Reconfirm the standing rule:
 
 Training Mode is a timed loot-efficiency challenge:
 
-- run duration hard-capped at **600 seconds**
-- 6 bots die on a fixed schedule
+- run duration hard-capped at **300 seconds**
+- at most 5 bots die on a fixed 5-second cadence
+- the fifth drop occurs at 25 seconds; no more loot is generated afterward
 - each death creates persistent loot
 - the player may voluntarily choose **Extract Now** to end the run early
-- the player tries to maximize secured value before time expires
+- the player uses the remaining time to decide what to secure and when to extract
 
 ## 8.2 State machine
 
@@ -677,7 +678,7 @@ PreRun
 - build the fixed death schedule
 
 ### `RunActive`
-- global timer advances until `600s`
+- global timer advances until `300s`
 - player may rearrange inventory and loot continuously
 - player may trigger **Extract Now** at any time to end the run voluntarily
 
@@ -693,11 +694,11 @@ PreRun
 
 #### `ExtractNow`
 - immediately ends the run voluntarily
-- locks the elapsed time used for the time-penalty lookup
+- locks the elapsed seconds used for the linear point deduction
 - transitions directly to `RunEnd`
 
 ### `RunEnd`
-- triggers at `t = 600s` exactly if the player never extracted earlier
+- triggers at `t = 300s` exactly if the player never extracted earlier
 - no grace period beyond the hard cap
 
 ### `ScoreRun`
@@ -710,14 +711,14 @@ PreRun
 
 ## 8.4 Locked bot death cadence
 
-Confirmed exact schedule:
+Confirmed exact schedule; loot does not disappear and no drops occur after bot 5:
 
-- bot 1 dies at **1s**
-- bot 2 dies at **31s**
-- bot 3 dies at **61s**
-- bot 4 dies at **91s**
-- bot 5 dies at **121s**
-- bot 6 dies at **151s**
+- bot 1 dies at **5s**
+- bot 2 dies at **10s**
+- bot 3 dies at **15s**
+- bot 4 dies at **20s**
+- bot 5 dies at **25s**
+- no more bots or loot drop after **25s**
 
 ### Exact-timestamp resolution order
 
@@ -744,14 +745,17 @@ It remains a lootable container instance.
 
 ```text
 grossScore = sum(baseValue of every scoring secured item instance in all player-owned inventory/equipment at run end)
-finalScore = floor(grossScore * timePenaltyMultiplier(floor(scoringElapsedSeconds)))
+timePenaltyPoints = min(floor(scoringElapsedSeconds), 300) * timePenaltyPointsPerSecond
+finalScore = max(0, grossScore - timePenaltyPoints)
 ```
 
 Where:
 
 - `scoringElapsedSeconds` is the elapsed time at the moment the player uses **Extract Now**
-- if the player never extracts, `scoringElapsedSeconds = 600`
-- elapsed time is **floored** before bracket lookup, so `180.9s` uses `180s`
+- if the player never extracts, `scoringElapsedSeconds = 300`
+- elapsed time is **floored** before calculating the point deduction, so `180.9s` uses `180s`
+- the provisional `timePenaltyPointsPerSecond` is **25 points/second** and is a balance value to tune
+- the round can award no less than zero points
 
 ### What counts as secured
 
@@ -775,23 +779,15 @@ ordinary loose loot items rather than as the active holder structure.
 - every scored item instance contributes its `baseValue` once
 - v1 does **not** support stack quantities or stack-based score multiplication
 
-### Placeholder — tune later: time penalty curve
+### Perfect-packing benchmark — implementation pending
 
-Recommended starting penalty multiplier by elapsed time:
-
-| Floored elapsed time used for score lookup | Multiplier |
-|---|---|
-| `0s–180s` | `1.00` |
-| `181s–300s` | `0.95` |
-| `301s–420s` | `0.85` |
-| `421s–540s` | `0.70` |
-| `541s–600s` | `0.50` |
-
-Notes:
-
-- This is intentionally simple and readable for v1.
-- It creates real pressure to finish earlier without making the timer feel meaningless.
-- **Placeholder — tune later** once item values and average run pacing are known.
+- The game should calculate the maximum loot value that can fit in the player's secured containers
+  from the bot drops available at the time of evaluation.
+- The solver must respect item masks, permitted rotations, compartment boundaries, occupied cells,
+  container state, and any configured capacity rules.
+- This benchmark is distinct from the time deduction: leaving loot on the ground does not itself
+  reduce score, while every elapsed second continues to subtract points.
+- The exact solver and player-facing maximum-value preview are not implemented yet.
 
 ## 8.7 Score presentation
 
@@ -817,7 +813,7 @@ These numbers are balance placeholders only.
 Locked v1 rule:
 
 - dropped loot stays available for the whole run
-- any loot left on the ground when the run ends, whether by extraction or the `600s` hard cap, scores `0`
+- any loot left on the ground when the run ends, whether by extraction or the `300s` hard cap, scores `0`
 
 ---
 
@@ -861,7 +857,10 @@ These are no longer open questions; they are the working v1 baseline:
 - Worn backpack counts as nesting level 1
 - Randomized bot loot from a pool
 - Ground loot shown as a persistent panel, not a modal
-- Hard run cap of 600 seconds
+- Five bot drops at 5-second intervals, ending at 25 seconds
+- Hard run cap of 300 seconds
+- Linear score deduction per elapsed second; starting balance is 25 points/second
+- Perfect-packing maximum-value solver is still to be implemented
 - Score counts all secured player inventory/equipment
 - Dead bots drop their backpacks as intact loot containers
 

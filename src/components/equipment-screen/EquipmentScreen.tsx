@@ -1,7 +1,7 @@
 import './EquipmentScreen.css'
 
 import type { CSSProperties, Dispatch } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import operatorImage from '../../assets/operator.png'
 import type { EquipmentSlotId, ItemCategory } from '../../data'
@@ -12,6 +12,8 @@ import {
   moveTrainingItem,
   selectCurrentSecuredValue,
   selectEquipmentSlots,
+  selectLootSourceStorageUnits,
+  selectLootSources,
   selectItem,
   selectOperationFeedback,
   selectPlayersRemaining,
@@ -50,7 +52,6 @@ import { clsx } from '../utils/clsx'
 
 const LEFT_RAIL_SLOT_IDS: readonly EquipmentSlotId[] = [
   'helmet',
-  'helmetFaceShield',
   'mask',
   'primaryWeapon',
   'secondaryWeapon',
@@ -146,6 +147,8 @@ interface SlotGroup {
 export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [activeStorageUnitId, setActiveStorageUnitId] = useState<string | null>(null)
+  const [isFaceShieldDialogOpen, setFaceShieldDialogOpen] = useState(false)
+  const faceShieldDialogRef = useRef<HTMLDialogElement>(null)
   const [, setStatusMessage] = useState(
     'Select an item, then click any highlighted cell or compatible equipment slot to move it.',
   )
@@ -179,6 +182,37 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     () => playerStorageUnits.find((storageUnit) => storageUnit.sourceItem?.equippedSlotId === 'pockets'),
     [playerStorageUnits],
   )
+  const helmetSlot = equipmentSlots.find((slot) => slot.slotId === 'helmet')
+  const equippedFaceShield = equipmentSlots.find((slot) => slot.slotId === 'helmetFaceShield')?.item
+  const helmetSupportsFaceShield = Boolean(helmetSlot?.item?.tags.includes('supports-face-shield'))
+  const faceShieldCandidates = useMemo(() => {
+    const itemsById = new Map<string, InventoryItemRecord>()
+    const addFaceShield = (item?: InventoryItemRecord) => {
+      if (item?.category === 'face_shield') {
+        itemsById.set(item.itemInstanceId, item)
+      }
+    }
+
+    playerStorageTree.forEach(({ storageUnit }) => {
+      addFaceShield(storageUnit.sourceItem)
+      storageUnit.compartments.forEach((compartment) => compartment.items.forEach(addFaceShield))
+    })
+    pocketsStorageUnit?.compartments.forEach((compartment) => compartment.items.forEach(addFaceShield))
+
+    selectLootSources(state).forEach((lootSource) => {
+      lootSource.topLevelItems.forEach(addFaceShield)
+      const lootStorageUnits = selectLootSourceStorageUnits(state, lootSource.lootSourceId)
+      const lootTree = flattenStorageUnitTree(lootStorageUnits, (storageUnitId) => selectStorageUnit(state, storageUnitId))
+      lootTree.forEach(({ storageUnit }) => {
+        addFaceShield(storageUnit.sourceItem)
+        storageUnit.compartments.forEach((compartment) => compartment.items.forEach(addFaceShield))
+      })
+    })
+
+    return [...itemsById.values()].filter((item) =>
+      validateEquipTrainingItem(state, equipTrainingItem(item.itemInstanceId, 'helmetFaceShield')).ok,
+    )
+  }, [playerStorageTree, pocketsStorageUnit, state])
 
   useEffect(() => {
     if (selectedItemId && !selectedItem) {
@@ -191,6 +225,27 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
       setActiveStorageUnitId(null)
     }
   }, [activeStorageUnit, activeStorageUnitId])
+
+  useEffect(() => {
+    const dialog = faceShieldDialogRef.current
+    if (!dialog) {
+      return
+    }
+
+    if (isFaceShieldDialogOpen && !dialog.open) {
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal()
+      } else {
+        dialog.setAttribute('open', '')
+      }
+    } else if (!isFaceShieldDialogOpen && dialog.open) {
+      if (typeof dialog.close === 'function') {
+        dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [isFaceShieldDialogOpen])
 
   useEffect(() => {
     if (operationFeedback.lastError) {
@@ -296,6 +351,56 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     )
     setStatusMessage(`${selectedItem.name} ${describePlacement(target)}.`)
     setSelectedItemId(null)
+  }
+
+  function handleEquipmentSlotClick(slotId: EquipmentSlotId) {
+    if (slotId === 'helmet' && !selectedItem && helmetSupportsFaceShield) {
+      setFaceShieldDialogOpen(true)
+      return
+    }
+
+    handlePlaceItem({ kind: 'equipment-slot', slotId })
+  }
+
+  function handleEquipmentItemClick(slotId: EquipmentSlotId, item: InventoryItemRecord) {
+    if (slotId === 'helmet' && item.tags.includes('supports-face-shield')) {
+      setSelectedItemId(null)
+      setFaceShieldDialogOpen(true)
+      return
+    }
+
+    handleItemSelect(item.itemInstanceId)
+  }
+
+  function handleFaceShieldEquip(item: InventoryItemRecord) {
+    const action = equipTrainingItem(item.itemInstanceId, 'helmetFaceShield')
+    const validation = validateEquipTrainingItem(state, action)
+    if (!validation.ok) {
+      setStatusMessage(validation.reason ?? 'This face shield cannot be equipped.')
+      return
+    }
+
+    dispatch(action)
+    setSelectedItemId(null)
+    setFaceShieldDialogOpen(false)
+  }
+
+  function handleFaceShieldRemove() {
+    if (!equippedFaceShield) {
+      return
+    }
+
+    const dropAction = dropTrainingItemToGround(equippedFaceShield.itemInstanceId)
+    const dropValidation = validateDropTrainingItemToGround(state, dropAction)
+    if (dropValidation.ok) {
+      dispatch(dropAction)
+      setSelectedItemId(null)
+      setFaceShieldDialogOpen(false)
+      setStatusMessage(`${equippedFaceShield.name} returned to the ground stash.`)
+      return
+    }
+
+    setStatusMessage(dropValidation.reason ?? 'This face shield cannot be removed right now.')
   }
 
   function handleDropToGround(itemInstanceId = selectedItemId) {
@@ -405,9 +510,12 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
           </div>
 
           <div className="equipment-screen__hud-readout equipment-screen__hud-readout--accent">
-            <span className="equipment-screen__header-pill-label">Equipment price</span>
+            <span className="equipment-screen__header-pill-label">Current score</span>
             <span className="equipment-screen__header-pill-value" data-testid="secured-value">
-              ${securedValue.toLocaleString()}
+              ${Math.max(0, securedValue - timer.currentTimePenaltyPoints).toLocaleString()}
+            </span>
+            <span className="equipment-screen__header-pill-meta" data-testid="score-penalty">
+              Secured ${securedValue.toLocaleString()} · −${timer.currentTimePenaltyPoints.toLocaleString()} time
             </span>
           </div>
 
@@ -442,8 +550,9 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                             validation?.valid && 'equipment-screen__slot--valid',
                             validation && !validation.valid && 'equipment-screen__slot--invalid',
                           )}
+                          data-slot-id={slot.slotId}
                           key={slot.slotId}
-                          onClick={() => handlePlaceItem({ kind: 'equipment-slot', slotId: slot.slotId })}
+                          onClick={() => handleEquipmentSlotClick(slot.slotId)}
                           onDragOver={(event) => {
                             if (validation?.valid) {
                               event.preventDefault()
@@ -462,11 +571,12 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                                 'equipment-screen__slot-item',
                                 selectedItemId === slot.item.itemInstanceId && 'equipment-screen__slot-item--selected',
                               )}
+                              aria-label={slot.item.name}
                               data-testid={`slot-item-${slot.slotId}`}
                               draggable
                               onClick={(event) => {
                                 event.stopPropagation()
-                                handleItemSelect(slot.item!.itemInstanceId)
+                                handleEquipmentItemClick(slot.slotId, slot.item!)
                               }}
                               onDragStart={(event) => {
                                 event.dataTransfer.effectAllowed = 'move'
@@ -480,6 +590,7 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                                 } as CSSProperties
                               }
                               tabIndex={0}
+                              title={slot.item.name}
                             >
                               <span className="equipment-screen__slot-item-nameplate">{slot.item.name}</span>
                               <span className="equipment-screen__slot-item-art" aria-hidden="true">
@@ -524,190 +635,191 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
             ))}
           </aside>
 
-          <section className="equipment-screen__silhouette">
-            <div className="equipment-screen__mannequin">
-              <div className="equipment-screen__operator-stage">
-                <img
-                  src={operatorImage}
-                  alt="Operator loadout preview"
-                  className="equipment-screen__operator-image"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="equipment-screen__column">
-            <section>
-              <section className="equipment-screen__pockets equipment-screen__panel" aria-label="Pockets">
-                <h3 className="equipment-screen__slot-frame-label equipment-screen__pockets-title">Pockets</h3>
-                {pocketsStorageUnit ? (
-                  <CompartmentGrid
-                    getPlacementValidation={(target) => getValidation(target)}
-                    items={pocketsStorageUnit.compartments.flatMap((compartment) => compartment.items)}
-                    equipment-screen__column equipment-screen__panel equipment-screen__silhouette layout={toGridLayout(pocketsStorageUnit)}
-                    onItemSelect={handleItemSelect}
-                    onContainerOpen={handleContainerOpen}
-                    onPlaceItem={handlePlaceItem}
-                    selectedItem={selectedItem}
-                    selectedItemId={selectedItemId}
-                  />
-                ) : null}
-              </section>
-
-              <div className="equipment-screen__slots equipment-screen__slots--quick">
-                {rightRailSlots.map((slot) => {
-                  if (slot.slotId === 'backpack' && slot.item) {
-                    return null
-                  }
-
-                  const validation = getValidation({
-                    kind: 'equipment-slot',
-                    slotId: slot.slotId,
-                  })
-
-                  return (
-                    <button
-                      className={clsx(
-                        'equipment-screen__slot',
-                        getSlotToneClass(slot.slotId),
-                        validation?.valid && 'equipment-screen__slot--valid',
-                        validation && !validation.valid && 'equipment-screen__slot--invalid',
-                      )}
-                      data-testid={`slot-target-${slot.slotId}`}
-                      key={slot.slotId}
-                      onClick={() => handlePlaceItem({ kind: 'equipment-slot', slotId: slot.slotId })}
-                      onDragOver={(event) => {
-                        if (validation?.valid) {
-                          event.preventDefault()
-                        }
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault()
-                        handlePlaceItem({ kind: 'equipment-slot', slotId: slot.slotId })
-                      }}
-                      type="button"
-                    >
-                      <span className="equipment-screen__slot-frame-label">{slot.label}</span>
-                      {slot.item ? (
-                        <span
-                          className={clsx(
-                            'equipment-screen__slot-item',
-                            selectedItemId === slot.item.itemInstanceId && 'equipment-screen__slot-item--selected',
-                          )}
-                          data-testid={`slot-item-${slot.slotId}`}
-                          draggable
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleItemSelect(slot.item!.itemInstanceId)
-                          }}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/plain', slot.item!.itemInstanceId)
-                            handleItemSelect(slot.item!.itemInstanceId)
-                          }}
-                          role="button"
-                          style={{ '--item-tint': getItemTint(slot.item) } as CSSProperties}
-                          tabIndex={0}
-                        >
-                          <span className="equipment-screen__slot-item-nameplate">{slot.item.name}</span>
-                          <span className="equipment-screen__slot-item-art" aria-hidden="true">
-                            {getItemImageSrc(slot.item) ? (
-                              <img alt="" src={getItemImageSrc(slot.item) ?? undefined} />
-                            ) : (
-                              getItemGlyph(slot.item)
-                            )}
-                          </span>
-                          {getItemStatusChip(slot.item) ? (
-                            <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--top-right">
-                              {getItemStatusChip(slot.item)}
-                            </span>
-                          ) : null}
-                          <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--bottom-left">
-                            {getItemDescriptor(slot.item)}
-                          </span>
-                          <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--bottom-right">
-                            {getItemCounterLabel(slot.item)}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="equipment-screen__slot-empty">
-                          <span className="equipment-screen__slot-empty-icon" aria-hidden="true">
-                            +
-                          </span>
-                          <span className="equipment-screen__slot-help">
-                            {getSlotHelpLabel(slot)}
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+          <div className="equipment-screen__operator-area">
+            <section className="equipment-screen__silhouette" aria-hidden="true">
+              <div className="equipment-screen__mannequin">
+                <div className="equipment-screen__operator-stage">
+                  <img src={operatorImage} alt="" className="equipment-screen__operator-image" />
+                </div>
               </div>
             </section>
 
-            <div className="equipment-screen__storage-stack">
-              {activeStorageUnit?.sourceItem?.parentStorageUnitId ? (
-                <button className="equipment-screen__storage-back" onClick={handleStorageBack} type="button">
-                  ← Back to outer backpack
-                </button>
-              ) : null}
-              {visiblePlayerStorageUnits.map(({ storageUnit, depth }) => (
-                <div
-                  className={clsx(
-                    'equipment-screen__storage-node',
-                    storageUnit.sourceItem?.equippedSlotId === 'backpack' &&
-                    'equipment-screen__storage-node--backpack',
-                  )}
-                  key={storageUnit.storageUnitId}
-                  style={{ '--storage-depth': `${depth * 14}px` } as CSSProperties}
-                >
-                  {storageUnit.sourceItem ? (
-                    <button
-                      className={clsx(
-                        'equipment-screen__storage-source',
-                        selectedItemId === storageUnit.sourceItem.itemInstanceId &&
-                        'equipment-screen__storage-source--selected',
-                      )}
-                      data-testid={`storage-source-${storageUnit.sourceItem.itemInstanceId}`}
-                      onClick={() => handleItemSelect(storageUnit.sourceItem!.itemInstanceId)}
-                      style={
-                        {
-                          '--item-tint': getItemTint(storageUnit.sourceItem),
-                        } as CSSProperties
-                      }
-                      type="button"
-                    >
-                      <span className="equipment-screen__storage-source-nameplate">
-                        {storageUnit.sourceItem.name}
-                      </span>
-                      <span className="equipment-screen__storage-source-art" aria-hidden="true">
-                        {getItemImageSrc(storageUnit.sourceItem) ? (
-                          <img alt="" src={getItemImageSrc(storageUnit.sourceItem) ?? undefined} />
-                        ) : (
-                          getItemGlyph(storageUnit.sourceItem)
-                        )}
-                      </span>
-                      <span className="equipment-screen__storage-source-footer">
-                        <strong>{storageUnit.layoutName}</strong>
-                        <span>{getItemCounterLabel(storageUnit.sourceItem)}</span>
-                      </span>
-                    </button>
+            <section className="equipment-screen__column equipment-screen__operator-loadout">
+              <section className="equipment-screen__operator-items">
+                <section className="equipment-screen__pockets equipment-screen__panel" aria-label="Pockets">
+                  <h3 className="equipment-screen__slot-frame-label equipment-screen__pockets-title">Pockets</h3>
+                  {pocketsStorageUnit ? (
+                    <CompartmentGrid
+                      getPlacementValidation={(target) => getValidation(target)}
+                      items={pocketsStorageUnit.compartments.flatMap((compartment) => compartment.items)}
+                      equipment-screen__column equipment-screen__panel equipment-screen__silhouette layout={toGridLayout(pocketsStorageUnit)}
+                      onItemSelect={handleItemSelect}
+                      onContainerOpen={handleContainerOpen}
+                      onPlaceItem={handlePlaceItem}
+                      selectedItem={selectedItem}
+                      selectedItemId={selectedItemId}
+                    />
                   ) : null}
+                </section>
 
-                  <CompartmentGrid
-                    getPlacementValidation={(target) => getValidation(target)}
-                    items={storageUnit.compartments.flatMap((compartment) => compartment.items)}
-                    layout={toGridLayout(storageUnit)}
-                    onItemSelect={handleItemSelect}
-                    onContainerOpen={handleContainerOpen}
-                    onPlaceItem={handlePlaceItem}
-                    selectedItem={selectedItem}
-                    selectedItemId={selectedItemId}
-                  />
+                <div className="equipment-screen__slots equipment-screen__slots--quick">
+                  {rightRailSlots.map((slot) => {
+                    const validation = getValidation({
+                      kind: 'equipment-slot',
+                      slotId: slot.slotId,
+                    })
+
+                    return (
+                      <button
+                        className={clsx(
+                          'equipment-screen__slot',
+                          getSlotToneClass(slot.slotId),
+                          validation?.valid && 'equipment-screen__slot--valid',
+                          validation && !validation.valid && 'equipment-screen__slot--invalid',
+                        )}
+                        data-slot-id={slot.slotId}
+                        data-testid={`slot-target-${slot.slotId}`}
+                        key={slot.slotId}
+                        onClick={() => handleEquipmentSlotClick(slot.slotId)}
+                        onDragOver={(event) => {
+                          if (validation?.valid) {
+                            event.preventDefault()
+                          }
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault()
+                          handlePlaceItem({ kind: 'equipment-slot', slotId: slot.slotId })
+                        }}
+                        type="button"
+                      >
+                        <span className="equipment-screen__slot-frame-label">{slot.label}</span>
+                        {slot.item ? (
+                          <span
+                            className={clsx(
+                              'equipment-screen__slot-item',
+                              selectedItemId === slot.item.itemInstanceId && 'equipment-screen__slot-item--selected',
+                            )}
+                            aria-label={slot.item.name}
+                            data-testid={`slot-item-${slot.slotId}`}
+                            draggable
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleEquipmentItemClick(slot.slotId, slot.item!)
+                            }}
+                            onDragStart={(event) => {
+                              event.dataTransfer.effectAllowed = 'move'
+                              event.dataTransfer.setData('text/plain', slot.item!.itemInstanceId)
+                              handleItemSelect(slot.item!.itemInstanceId)
+                            }}
+                            role="button"
+                            style={{ '--item-tint': getItemTint(slot.item) } as CSSProperties}
+                            tabIndex={0}
+                            title={slot.item.name}
+                          >
+                            <span className="equipment-screen__slot-item-nameplate">{slot.item.name}</span>
+                            <span className="equipment-screen__slot-item-art" aria-hidden="true">
+                              {getItemImageSrc(slot.item) ? (
+                                <img alt="" src={getItemImageSrc(slot.item) ?? undefined} />
+                              ) : (
+                                getItemGlyph(slot.item)
+                              )}
+                            </span>
+                            {getItemStatusChip(slot.item) ? (
+                              <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--top-right">
+                                {getItemStatusChip(slot.item)}
+                              </span>
+                            ) : null}
+                            <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--bottom-left">
+                              {getItemDescriptor(slot.item)}
+                            </span>
+                            <span className="equipment-screen__slot-item-chip equipment-screen__slot-item-chip--bottom-right">
+                              {getItemCounterLabel(slot.item)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="equipment-screen__slot-empty">
+                            <span className="equipment-screen__slot-empty-icon" aria-hidden="true">
+                              +
+                            </span>
+                            <span className="equipment-screen__slot-help">
+                              {getSlotHelpLabel(slot)}
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
-          </section>
+              </section>
+
+              <div className="equipment-screen__storage-stack">
+                {activeStorageUnit?.sourceItem?.parentStorageUnitId ? (
+                  <button className="equipment-screen__storage-back" onClick={handleStorageBack} type="button">
+                    ← Back to outer backpack
+                  </button>
+                ) : null}
+                {visiblePlayerStorageUnits.map(({ storageUnit, depth }) => (
+                  <div
+                    className={clsx(
+                      'equipment-screen__storage-node',
+                      storageUnit.sourceItem?.equippedSlotId === 'backpack' &&
+                      'equipment-screen__storage-node--backpack',
+                      storageUnit.sourceItem?.equippedSlotId === 'tacticalVest' &&
+                      'equipment-screen__storage-node--tactical-vest',
+                    )}
+                    key={storageUnit.storageUnitId}
+                    style={{ '--storage-depth': `${depth * 14}px` } as CSSProperties}
+                  >
+                    {storageUnit.sourceItem &&
+                      storageUnit.sourceItem.equippedSlotId !== 'tacticalVest' &&
+                      storageUnit.sourceItem.equippedSlotId !== 'backpack' ? (
+                      <button
+                        className={clsx(
+                          'equipment-screen__storage-source',
+                          selectedItemId === storageUnit.sourceItem.itemInstanceId &&
+                          'equipment-screen__storage-source--selected',
+                        )}
+                        data-testid={`storage-source-${storageUnit.sourceItem.itemInstanceId}`}
+                        onClick={() => handleItemSelect(storageUnit.sourceItem!.itemInstanceId)}
+                        style={
+                          {
+                            '--item-tint': getItemTint(storageUnit.sourceItem),
+                          } as CSSProperties
+                        }
+                        type="button"
+                      >
+                        <span className="equipment-screen__storage-source-nameplate">
+                          {storageUnit.sourceItem.name}
+                        </span>
+                        <span className="equipment-screen__storage-source-art" aria-hidden="true">
+                          {getItemImageSrc(storageUnit.sourceItem) ? (
+                            <img alt="" src={getItemImageSrc(storageUnit.sourceItem) ?? undefined} />
+                          ) : (
+                            getItemGlyph(storageUnit.sourceItem)
+                          )}
+                        </span>
+                        <span className="equipment-screen__storage-source-footer">
+                          <strong>{storageUnit.layoutName}</strong>
+                          <span>{getItemCounterLabel(storageUnit.sourceItem)}</span>
+                        </span>
+                      </button>
+                    ) : null}
+
+                    <CompartmentGrid
+                      getPlacementValidation={(target) => getValidation(target)}
+                      items={storageUnit.compartments.flatMap((compartment) => compartment.items)}
+                      layout={toGridLayout(storageUnit)}
+                      onItemSelect={handleItemSelect}
+                      onContainerOpen={handleContainerOpen}
+                      onPlaceItem={handlePlaceItem}
+                      selectedItem={selectedItem}
+                      selectedItemId={selectedItemId}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
 
           <aside className="equipment-screen__column equipment-screen__ground-column">
             <GroundLootPanel
@@ -721,6 +833,68 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
             />
           </aside>
         </div>
+
+        <dialog
+          aria-labelledby="face-shield-dialog-title"
+          aria-modal="true"
+          className="equipment-screen__face-shield-dialog"
+          onCancel={(event) => {
+            event.preventDefault()
+            setFaceShieldDialogOpen(false)
+          }}
+          onClose={() => setFaceShieldDialogOpen(false)}
+          ref={faceShieldDialogRef}
+        >
+          <div className="equipment-screen__face-shield-dialog-header">
+            <div>
+              <p className="equipment-screen__face-shield-dialog-kicker">Helmet attachment</p>
+              <h2 id="face-shield-dialog-title">Equip face shield</h2>
+            </div>
+            <button onClick={() => setFaceShieldDialogOpen(false)} type="button">
+              Close
+            </button>
+          </div>
+
+          <p className="equipment-screen__face-shield-dialog-copy">
+            {helmetSlot?.item ? `Compatible with ${helmetSlot.item.name}.` : 'Choose a compatible face shield.'}
+          </p>
+
+          {equippedFaceShield ? (
+            <div className="equipment-screen__face-shield-current">
+              <span>Equipped</span>
+              <strong>{equippedFaceShield.name}</strong>
+              <span>{getItemCounterLabel(equippedFaceShield)}</span>
+              <button onClick={handleFaceShieldRemove} type="button">
+                Remove
+              </button>
+            </div>
+          ) : null}
+
+          {faceShieldCandidates.length > 0 ? (
+            <div className="equipment-screen__face-shield-options">
+              {faceShieldCandidates.map((item) => (
+                <button
+                  className="equipment-screen__face-shield-option"
+                  key={item.itemInstanceId}
+                  onClick={() => handleFaceShieldEquip(item)}
+                  style={{ '--item-tint': getItemTint(item) } as CSSProperties}
+                  type="button"
+                >
+                  <span className="equipment-screen__face-shield-art" aria-hidden="true">
+                    {getItemImageSrc(item) ? <img alt="" src={getItemImageSrc(item) ?? undefined} /> : getItemGlyph(item)}
+                  </span>
+                  <span className="equipment-screen__face-shield-option-copy">
+                    <strong>{item.name}</strong>
+                    <span>{getItemDescriptor(item)}</span>
+                  </span>
+                  <span className="equipment-screen__face-shield-option-count">{getItemCounterLabel(item)}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="equipment-screen__face-shield-empty">No compatible face shields available.</p>
+          )}
+        </dialog>
       </div>
     </div>
   )

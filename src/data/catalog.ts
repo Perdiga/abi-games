@@ -7,11 +7,9 @@ import type {
   EquipmentSlotId,
   ItemDefinition,
   ItemStateDefinition,
-  MedalThreshold,
   RuleDefinition,
   RunDefinition,
   ShapeMask,
-  TimePenaltyBand,
 } from './types'
 import { abiAssetItems, type AbiAssetItem } from './abi-assets.generated'
 
@@ -921,30 +919,14 @@ export const ruleDefinitions: readonly RuleDefinition[] = [
   },
 ] as const
 
-export const TRAINING_TIME_PENALTY_BANDS: readonly TimePenaltyBand[] = [
-  { maxElapsedSeconds: 180, multiplier: 1 },
-  { maxElapsedSeconds: 300, multiplier: 0.95 },
-  { maxElapsedSeconds: 420, multiplier: 0.85 },
-  { maxElapsedSeconds: 540, multiplier: 0.7 },
-  { maxElapsedSeconds: 600, multiplier: 0.5 },
-] as const
-
-export const TRAINING_MEDAL_THRESHOLDS: readonly MedalThreshold[] = [
-  { medal: 'Diamond', minimumScore: 100_000 },
-  { medal: 'Platinum', minimumScore: 70_000 },
-  { medal: 'Gold', minimumScore: 45_000 },
-  { medal: 'Silver', minimumScore: 25_000 },
-  { medal: 'Bronze', minimumScore: 10_000 },
-  { medal: 'No Medal', minimumScore: 0 },
-] as const
+export const TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS = 30
 
 export const runDefinitions: readonly RunDefinition[] = [
   {
     id: 'training-mode-v1',
-    durationSeconds: 600,
-    botDeathSchedule: [1, 31, 61, 91, 121, 151],
-    timePenaltyBands: TRAINING_TIME_PENALTY_BANDS,
-    medalThresholds: TRAINING_MEDAL_THRESHOLDS,
+    durationSeconds: 300,
+    botDeathSchedule: [5, 10, 15, 20, 25],
+    timePenaltyGracePeriodSeconds: TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
     lootGenerationMode: 'randomized_from_pool',
   },
 ] as const

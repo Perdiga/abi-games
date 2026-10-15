@@ -1,6 +1,7 @@
 import {
   createCatalogIndex,
   playerStarterLoadout,
+  TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
   trainingBotLoadoutPool,
   type BotLoadoutTemplate,
   type BotRosterEntry,
@@ -20,8 +21,10 @@ import {
   createEmptyInventoryState,
   createItemInstance,
   equipItemToSlot,
+  getContainedItemIdsDeep,
   getChildItems,
   getStorageUnitForItem,
+  isScorableAsLoot,
 } from '../inventory'
 
 const defaultCatalog = createCatalogIndex()
@@ -46,6 +49,7 @@ export const createTrainingRunState = (catalog: CatalogIndex = defaultCatalog): 
   definitionId: 'training-mode-v1',
   phase: 'PreRun',
   elapsedSeconds: 0,
+  maximumPotentialScore: 0,
   inventory: createEmptyInventoryState(catalog),
   botRoster: [],
   pendingBotDeaths: [],
@@ -68,53 +72,77 @@ export const advanceTrainingRun = (
   }
 }
 
-export const getScoringElapsedSeconds = (elapsedSeconds: number): number => Math.floor(elapsedSeconds)
+export const getScoringElapsedSeconds = (
+  elapsedSeconds: number,
+  catalog: CatalogIndex = defaultCatalog,
+): number => Math.min(catalog.runDefinitionsById['training-mode-v1'].durationSeconds, Math.max(0, Math.floor(elapsedSeconds)))
 
-export const getTimePenaltyMultiplier = (elapsedSeconds: number, catalog: CatalogIndex = defaultCatalog): number => {
+export const getTimePenaltyPoints = (
+  elapsedSeconds: number,
+  grossScore: number,
+  catalog: CatalogIndex = defaultCatalog,
+): number => {
   const definition = catalog.runDefinitionsById['training-mode-v1']
-  const scoringElapsedSeconds = getScoringElapsedSeconds(elapsedSeconds)
-  return definition.timePenaltyBands.find((band) => scoringElapsedSeconds <= band.maxElapsedSeconds)?.multiplier ?? 0.5
+  const scoringElapsedSeconds = getScoringElapsedSeconds(elapsedSeconds, catalog)
+  const gracePeriodSeconds = Math.min(
+    definition.durationSeconds,
+    definition.timePenaltyGracePeriodSeconds ?? TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
+  )
+  const penaltyWindowSeconds = definition.durationSeconds - gracePeriodSeconds
+
+  if (penaltyWindowSeconds <= 0 || grossScore <= 0) {
+    return 0
+  }
+
+  const penalizedSeconds = Math.max(0, scoringElapsedSeconds - gracePeriodSeconds)
+  return Math.floor((grossScore * penalizedSeconds) / penaltyWindowSeconds)
 }
 
 export const scoreTrainingRun = (
   inventory: InventoryState,
   elapsedSeconds: number,
   catalog: CatalogIndex = defaultCatalog,
+  maximumPotentialScore?: number,
 ): ScoreBreakdown => {
   const grossScore = collectSecuredScorableItemIds(inventory, catalog).reduce((score, itemId) => {
     const item = inventory.itemInstances[itemId]
     const definition = item ? catalog.itemDefinitionsById[item.itemDefinitionId] : undefined
     return score + (definition?.baseValue ?? 0)
   }, 0)
-  const scoringElapsedSeconds = getScoringElapsedSeconds(elapsedSeconds)
-  const timePenaltyMultiplier = getTimePenaltyMultiplier(elapsedSeconds, catalog)
-  const finalScore = multiplyScoreByPenalty(grossScore, timePenaltyMultiplier)
-  const medal =
-    catalog.runDefinitionsById['training-mode-v1'].medalThresholds.find(
-      (threshold) => finalScore >= threshold.minimumScore,
-    )?.medal ?? 'No Medal'
+  const extractionMaximum = Math.max(grossScore, maximumPotentialScore ?? grossScore)
+  const scoringElapsedSeconds = getScoringElapsedSeconds(elapsedSeconds, catalog)
+  const timePenaltyPoints = getTimePenaltyPoints(scoringElapsedSeconds, grossScore, catalog)
+  const finalScore = Math.max(0, grossScore - timePenaltyPoints)
+  const starRating =
+    extractionMaximum > 0 ? Math.min(5, Math.floor((grossScore * 5) / extractionMaximum)) : 0
 
   return {
     grossScore,
+    maximumPotentialScore: extractionMaximum,
+    starRating,
     elapsedSeconds,
     scoringElapsedSeconds,
-    timePenaltyMultiplier,
+    timePenaltyPoints,
     finalScore,
-    medal,
   }
 }
 
-const multiplyScoreByPenalty = (grossScore: number, multiplier: number): number => {
-  const multiplierText = multiplier.toString()
-
-  if (!multiplierText.includes('.')) {
-    return grossScore * multiplier
+const getScorableValueForItemRoots = (
+  inventory: InventoryState,
+  rootItemIds: readonly string[],
+  catalog: CatalogIndex,
+): number => {
+  const itemIds = new Set<string>()
+  for (const itemId of rootItemIds) {
+    itemIds.add(itemId)
+    getContainedItemIdsDeep(inventory, itemId).forEach((childId) => itemIds.add(childId))
   }
 
-  const decimalPlaces = multiplierText.split('.')[1]?.length ?? 0
-  const scale = 10 ** decimalPlaces
-  const scaledMultiplier = Math.round(multiplier * scale)
-  return Math.floor((grossScore * scaledMultiplier) / scale)
+  return [...itemIds].reduce((score, itemId) => {
+    const item = inventory.itemInstances[itemId]
+    const definition = item ? catalog.itemDefinitionsById[item.itemDefinitionId] : undefined
+    return item && definition && isScorableAsLoot(item, catalog) ? score + definition.baseValue : score
+  }, 0)
 }
 
 const loadRunData = (
@@ -125,7 +153,9 @@ const loadRunData = (
   const definition = catalog.runDefinitionsById[state.definitionId]
   const rng = createSeededRng(seed)
   let inventory = createEmptyInventoryState(catalog)
-  inventory = seedLoadout(inventory, playerStarterLoadout, 'player', catalog, 'player').inventory
+  const playerLoadout = seedLoadout(inventory, playerStarterLoadout, 'player', catalog, 'player')
+  inventory = playerLoadout.inventory
+  const potentialItemIds = [...playerLoadout.topLevelItemIds]
 
   const botRoster: BotRosterEntry[] = []
 
@@ -134,14 +164,17 @@ const loadRunData = (
     const template = createRandomBotLoadout(catalog, rng, botId)
     const seeded = seedLoadout(inventory, template, botId, catalog, botId)
     inventory = seeded.inventory
+    potentialItemIds.push(...seeded.topLevelItemIds)
     botRoster.push({ botId, topLevelItemIds: seeded.topLevelItemIds, dropped: false })
   })
+  const maximumPotentialScore = getScorableValueForItemRoots(inventory, potentialItemIds, catalog)
 
   return {
     ...state,
     phase: 'RunActive',
     activePhase: 'AwaitNextBotDeath',
     inventory,
+    maximumPotentialScore,
     botRoster,
     pendingBotDeaths: definition.botDeathSchedule.map((atSeconds, index) => ({
       botId: `bot-${index + 1}`,
@@ -167,8 +200,18 @@ const createRandomBotLoadout = (
     availableDefinitionIds.splice(availableDefinitionIds.indexOf(backpackDefinitionId), 1)
   }
 
+  const weaponDefinitionIds = availableDefinitionIds.filter((itemDefinitionId) => {
+    const category = catalog.itemDefinitionsById[itemDefinitionId]?.category
+    return category === 'weapon_primary' || category === 'weapon_secondary' || category === 'weapon_pistol'
+  })
+  if (weaponDefinitionIds.length > 0) {
+    const weaponDefinitionId = weaponDefinitionIds[Math.floor(rng() * weaponDefinitionIds.length)]!
+    availableDefinitionIds.splice(availableDefinitionIds.indexOf(weaponDefinitionId), 1)
+    loot.push(weaponDefinitionId)
+  }
+
   const equippedItemCount = backpackDefinitionId ? 1 : 0
-  const maximumLootItems = Math.min(MAX_BOT_DROP_ITEMS - equippedItemCount, availableDefinitionIds.length)
+  const maximumLootItems = Math.min(MAX_BOT_DROP_ITEMS - equippedItemCount, availableDefinitionIds.length + loot.length)
   const minimumLootItems = Math.min(MIN_RANDOM_BOT_LOOT_ITEMS, maximumLootItems)
   const itemCount = minimumLootItems + Math.floor(rng() * (maximumLootItems - minimumLootItems + 1))
 
@@ -251,7 +294,7 @@ const finalizeRun = (
   scoringElapsedSeconds: number,
   catalog: CatalogIndex,
 ): TrainingRunState => {
-  const score = scoreTrainingRun(state.inventory, scoringElapsedSeconds, catalog)
+  const score = scoreTrainingRun(state.inventory, scoringElapsedSeconds, catalog, state.maximumPotentialScore)
 
   return {
     ...state,

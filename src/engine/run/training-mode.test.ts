@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCatalogIndex } from '../../data'
+import { createCatalogIndex, type CatalogIndex } from '../../data'
 import {
   addItemInstance,
   createEmptyInventoryState,
@@ -14,7 +14,7 @@ import {
   advanceTrainingRun,
   createTrainingRunState,
   dropItemToGround,
-  getTimePenaltyMultiplier,
+  getTimePenaltyPoints,
   scoreTrainingRun,
 } from './index'
 
@@ -108,20 +108,23 @@ describe('training mode run state machine', () => {
 
     expect(started.phase).toBe('RunActive')
     expect(started.activePhase).toBe('AwaitNextBotDeath')
-    expect(started.pendingBotDeaths).toHaveLength(6)
+    expect(started.pendingBotDeaths).toHaveLength(5)
 
-    const afterFirstSecond = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 1 }, catalog)
-    expect(afterFirstSecond.lootSources).toHaveLength(1)
-    expect(afterFirstSecond.activePhase).toBe('PlayerLooting')
-    expect(afterFirstSecond.phaseHistory).toContain('RunActive:SpawnLootDrop')
+    const beforeFirstDrop = advanceToElapsed(started, 4.999)
+    expect(beforeFirstDrop.lootSources).toHaveLength(0)
 
-    const afterAllDrops = advanceTrainingRun(afterFirstSecond, { type: 'ADVANCE_TIME', deltaSeconds: 150 }, catalog)
-    expect(afterAllDrops.lootSources).toHaveLength(6)
+    const afterFirstDrop = advanceToElapsed(started, 5)
+    expect(afterFirstDrop.lootSources).toHaveLength(1)
+    expect(afterFirstDrop.activePhase).toBe('PlayerLooting')
+    expect(afterFirstDrop.phaseHistory).toContain('RunActive:SpawnLootDrop')
 
-    const finished = advanceTrainingRun(afterAllDrops, { type: 'ADVANCE_TIME', deltaSeconds: 449 }, catalog)
+    const afterAllDrops = advanceToElapsed(afterFirstDrop, 25)
+    expect(afterAllDrops.lootSources).toHaveLength(5)
+
+    const finished = advanceToElapsed(afterAllDrops, 300)
     expect(finished.phase).toBe('ResultsScreen')
     expect(finished.runEndReason).toBe('time-cap')
-    expect(finished.score?.scoringElapsedSeconds).toBe(600)
+    expect(finished.score?.scoringElapsedSeconds).toBe(300)
     expect(finished.phaseHistory.slice(-3)).toEqual(['RunEnd', 'ScoreRun', 'ResultsScreen'])
   })
 
@@ -133,7 +136,18 @@ describe('training mode run state machine', () => {
     expect(extracted.phase).toBe('ResultsScreen')
     expect(extracted.runEndReason).toBe('extract')
     expect(extracted.score?.scoringElapsedSeconds).toBe(180)
-    expect(extracted.lootSources).toHaveLength(6)
+    expect(extracted.lootSources).toHaveLength(5)
+  })
+
+  it('counts every bot toward perfect-extraction potential when extracting early', () => {
+    const started = createStartedRun()
+    const afterFirstDrop = advanceToElapsed(started, 5)
+    const extracted = advanceTrainingRun(afterFirstDrop, { type: 'EXTRACT_NOW' }, catalog)
+
+    expect(afterFirstDrop.botRoster.filter((entry) => !entry.dropped)).toHaveLength(4)
+    expect(started.maximumPotentialScore).toBeGreaterThan(0)
+    expect(extracted.score?.maximumPotentialScore).toBe(started.maximumPotentialScore)
+    expect(extracted.score?.starRating).toBe(0)
   })
 
   it('starts runs with equipped empty pockets and zero secured score', () => {
@@ -146,21 +160,20 @@ describe('training mode run state machine', () => {
     expect(scoreTrainingRun(started.inventory, 0, catalog)).toMatchObject({
       grossScore: 0,
       finalScore: 0,
-      medal: 'No Medal',
+      starRating: 0,
     })
   })
 
-  it('fires bot deaths 2 through 6 only at 31/61/91/121/151 seconds', () => {
+  it('fires the five bot deaths every five seconds, with no further drops', () => {
     let state = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    state = advanceToElapsed(state, 1)
+    state = advanceToElapsed(state, 5)
     expect(state.lootSources).toHaveLength(1)
 
     const checkpoints = [
-      { before: 30.999, exact: 31, totalLootSources: 2, botId: 'bot-2' },
-      { before: 60.999, exact: 61, totalLootSources: 3, botId: 'bot-3' },
-      { before: 90.999, exact: 91, totalLootSources: 4, botId: 'bot-4' },
-      { before: 120.999, exact: 121, totalLootSources: 5, botId: 'bot-5' },
-      { before: 150.999, exact: 151, totalLootSources: 6, botId: 'bot-6' },
+      { before: 9.999, exact: 10, totalLootSources: 2, botId: 'bot-2' },
+      { before: 14.999, exact: 15, totalLootSources: 3, botId: 'bot-3' },
+      { before: 19.999, exact: 20, totalLootSources: 4, botId: 'bot-4' },
+      { before: 24.999, exact: 25, totalLootSources: 5, botId: 'bot-5' },
     ] as const
 
     for (const checkpoint of checkpoints) {
@@ -178,41 +191,59 @@ describe('training mode run state machine', () => {
     expect(state.pendingBotDeaths).toEqual([])
   })
 
-  it('ends exactly at the 600-second hard cap with no grace period beyond it', () => {
+  it('ends exactly at the 300-second hard cap with no grace period beyond it', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const beforeCap = advanceToElapsed(started, 599.9)
+    const beforeCap = advanceToElapsed(started, 299.9)
 
     expect(beforeCap.phase).toBe('RunActive')
     expect(beforeCap.runEndReason).toBeUndefined()
 
-    const atCap = advanceToElapsed(beforeCap, 600)
+    const atCap = advanceToElapsed(beforeCap, 300)
     expect(atCap.phase).toBe('ResultsScreen')
     expect(atCap.runEndReason).toBe('time-cap')
-    expect(atCap.score?.scoringElapsedSeconds).toBe(600)
+    expect(atCap.score?.scoringElapsedSeconds).toBe(300)
 
     const beyondCap = advanceTrainingRun(atCap, { type: 'ADVANCE_TIME', deltaSeconds: 1 }, catalog)
     expect(beyondCap).toEqual(atCap)
   })
 
-  it('floors elapsed seconds before time-penalty bracket lookup', () => {
-    expect(getTimePenaltyMultiplier(180.9, catalog)).toBe(1)
-    expect(getTimePenaltyMultiplier(181, catalog)).toBe(0.95)
+  it('applies no penalty for the first 30 seconds and scales it to gross score', () => {
+    expect(getTimePenaltyPoints(0, 1000, catalog)).toBe(0)
+    expect(getTimePenaltyPoints(30, 1000, catalog)).toBe(0)
+    expect(getTimePenaltyPoints(165, 1000, catalog)).toBe(500)
+    expect(getTimePenaltyPoints(300, 1000, catalog)).toBe(1000)
+    expect(getTimePenaltyPoints(301, 1000, catalog)).toBe(1000)
+  })
+
+  it('uses the grace period when an active run has an older catalog definition', () => {
+    const legacyCatalog = {
+      ...catalog,
+      runDefinitionsById: {
+        ...catalog.runDefinitionsById,
+        'training-mode-v1': {
+          ...catalog.runDefinitionsById['training-mode-v1'],
+          timePenaltyGracePeriodSeconds: undefined,
+        },
+      },
+    } as unknown as CatalogIndex
+
+    expect(getTimePenaltyPoints(45, 1000, legacyCatalog)).toBe(55)
   })
 
   it('resolves a queued Extract Now action before a same-tick bot death', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const beforeSecondDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 30 }, catalog)
-    expect(beforeSecondDrop.lootSources).toHaveLength(1)
+    const beforeFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 4 }, catalog)
+    expect(beforeFirstDrop.lootSources).toHaveLength(0)
 
     const extractedOnDeathTick = advanceTrainingRun(
-      beforeSecondDrop,
-      { type: 'ADVANCE_TIME', deltaSeconds: 0.9999999999999964, queuedAction: { type: 'EXTRACT_NOW' } },
+      beforeFirstDrop,
+      { type: 'ADVANCE_TIME', deltaSeconds: 1, queuedAction: { type: 'EXTRACT_NOW' } },
       catalog,
     )
 
     expect(extractedOnDeathTick.phase).toBe('ResultsScreen')
     expect(extractedOnDeathTick.runEndReason).toBe('extract')
-    expect(extractedOnDeathTick.lootSources).toHaveLength(1)
+    expect(extractedOnDeathTick.lootSources).toHaveLength(0)
     expect(extractedOnDeathTick.phaseHistory).toContain('RunActive:ExtractNow')
   })
 
@@ -329,12 +360,12 @@ describe('training mode run state machine', () => {
 
     const score = scoreTrainingRun(inventory, 120, catalog)
     expect(score.grossScore).toBe(4200 + 2600 + 950 + 450 + 1800 + 950 + 3100)
-    expect(score.finalScore).toBe(score.grossScore)
+    expect(score.finalScore).toBe(score.grossScore - Math.floor((score.grossScore * 90) / 270))
   })
 
   it('does not count uncollected ground loot toward the final score', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const afterFirstDrop = advanceToElapsed(started, 1)
+    const afterFirstDrop = advanceToElapsed(started, 5)
 
     expect(afterFirstDrop.lootSources).toHaveLength(1)
 
@@ -353,61 +384,65 @@ describe('training mode run state machine', () => {
     expect(score.grossScore).toBe(0)
   })
 
-  it('applies the correct time-penalty bracket and floors final score per bracket', () => {
+  it('subtracts a gross-score percentage after the grace period and reaches zero at the cap', () => {
     const inventory = createFixedGrossScoreInventory()
 
     const cases = [
-      { elapsedSeconds: 180, multiplier: 1, finalScore: 1400 },
-      { elapsedSeconds: 181, multiplier: 0.95, finalScore: 1330 },
-      { elapsedSeconds: 301, multiplier: 0.85, finalScore: 1190 },
-      { elapsedSeconds: 421, multiplier: 0.7, finalScore: 980 },
-      { elapsedSeconds: 541, multiplier: 0.5, finalScore: 700 },
+      { elapsedSeconds: 0, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 1, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 30, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 31, timePenaltyPoints: 5, finalScore: 1395 },
+      { elapsedSeconds: 165, timePenaltyPoints: 700, finalScore: 700 },
+      { elapsedSeconds: 300, timePenaltyPoints: 1400, finalScore: 0 },
+      { elapsedSeconds: 450, timePenaltyPoints: 1400, finalScore: 0 },
     ] as const
 
     for (const testCase of cases) {
       const score = scoreTrainingRun(inventory, testCase.elapsedSeconds, catalog)
       expect(score.grossScore).toBe(1400)
-      expect(score.timePenaltyMultiplier).toBe(testCase.multiplier)
+      expect(score.timePenaltyPoints).toBe(testCase.timePenaltyPoints)
       expect(score.finalScore).toBe(testCase.finalScore)
     }
+
+    expect(scoreTrainingRun(inventory, 0, catalog, 1400).starRating).toBe(5)
+    expect(scoreTrainingRun(inventory, 0, catalog, 2800).starRating).toBe(2)
   })
 
-  it('uses the intended inclusive boundaries at every time-penalty cutover', () => {
-    const expectedMultipliersByElapsedSecond = new Map([
-      [180, 1],
-      [181, 0.95],
-      [300, 0.95],
-      [301, 0.85],
-      [420, 0.85],
-      [421, 0.7],
-      [540, 0.7],
-      [541, 0.5],
-      [600, 0.5],
+  it('uses floored elapsed time and caps the penalty at the five-minute round limit', () => {
+    const expectedPenaltyByElapsedSecond = new Map([
+      [30, 0],
+      [31, 5],
+      [165, 700],
+      [299, 1394],
+      [300, 1400],
+      [301, 1400],
     ])
 
-    for (const [elapsedSeconds, multiplier] of expectedMultipliersByElapsedSecond) {
-      expect(getTimePenaltyMultiplier(elapsedSeconds, catalog)).toBe(multiplier)
+    for (const [elapsedSeconds, penaltyPoints] of expectedPenaltyByElapsedSecond) {
+      expect(getTimePenaltyPoints(elapsedSeconds, 1400, catalog)).toBe(penaltyPoints)
     }
   })
 
-  it('floors non-integer elapsed times before looking up the time-penalty bracket', () => {
+  it('floors non-integer elapsed time before calculating the point penalty', () => {
     const cases = [
-      { elapsedSeconds: 180.1, flooredSeconds: 180, multiplier: 1 },
-      { elapsedSeconds: 180.9, flooredSeconds: 180, multiplier: 1 },
-      { elapsedSeconds: 300.9, flooredSeconds: 300, multiplier: 0.95 },
-      { elapsedSeconds: 540.9, flooredSeconds: 540, multiplier: 0.7 },
+      { elapsedSeconds: 0.1, flooredSeconds: 0, penaltyPoints: 0 },
+      { elapsedSeconds: 1.9, flooredSeconds: 1, penaltyPoints: 0 },
+      { elapsedSeconds: 30.9, flooredSeconds: 30, penaltyPoints: 0 },
+      { elapsedSeconds: 31.9, flooredSeconds: 31, penaltyPoints: 5 },
+      { elapsedSeconds: 165.9, flooredSeconds: 165, penaltyPoints: 700 },
+      { elapsedSeconds: 300.9, flooredSeconds: 300, penaltyPoints: 1400 },
     ] as const
 
     for (const testCase of cases) {
       const score = scoreTrainingRun(createFixedGrossScoreInventory(), testCase.elapsedSeconds, catalog)
       expect(score.scoringElapsedSeconds).toBe(testCase.flooredSeconds)
-      expect(score.timePenaltyMultiplier).toBe(testCase.multiplier)
+      expect(score.timePenaltyPoints).toBe(testCase.penaltyPoints)
     }
   })
 
   it('drops a bot backpack as an empty lootable unit without fixed placements', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const afterFirstDrop = advanceToElapsed(started, 1)
+    const afterFirstDrop = advanceToElapsed(started, 5)
     const lootSource = afterFirstDrop.lootSources[0]!
     const droppedBackpackId = lootSource.itemIds.find(
       (itemId) => afterFirstDrop.inventory.itemInstances[itemId]?.itemDefinitionId === 'abi-backpack_001',
@@ -420,6 +455,23 @@ describe('training mode run state machine', () => {
 
     expect(nestedChildren).toEqual([])
     expect(lootSource.itemIds).toContain(droppedBackpackId!)
+  })
+
+  it('drops a weapon and a backpack or tactical vest for every bot', () => {
+    const started = createStartedRun()
+    const afterAllDrops = advanceToElapsed(started, 25)
+    const weaponCategories = new Set(['weapon_primary', 'weapon_secondary', 'weapon_pistol'])
+
+    expect(afterAllDrops.lootSources).toHaveLength(5)
+    for (const lootSource of afterAllDrops.lootSources) {
+      const categories = lootSource.itemIds.map((itemId) => {
+        const item = afterAllDrops.inventory.itemInstances[itemId]
+        return item ? catalog.itemDefinitionsById[item.itemDefinitionId]?.category : undefined
+      })
+
+      expect(categories.some((category) => category !== undefined && weaponCategories.has(category))).toBe(true)
+      expect(categories.some((category) => category === 'backpack' || category === 'vest_tactical')).toBe(true)
+    }
   })
 
   it('limits every bot super drop to fifteen items', () => {
@@ -565,34 +617,32 @@ describe('training mode run state machine', () => {
 
   it('keeps multiple loot drops alive simultaneously for the entire run when the player ignores them', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const afterFourthDrop = advanceToElapsed(started, 91)
+    const afterFourthDrop = advanceToElapsed(started, 20)
 
     expect(afterFourthDrop.lootSources.map((source) => source.botId)).toEqual(['bot-1', 'bot-2', 'bot-3', 'bot-4'])
 
-    const afterAllDrops = advanceToElapsed(afterFourthDrop, 151)
+    const afterAllDrops = advanceToElapsed(afterFourthDrop, 25)
     expect(afterAllDrops.lootSources.map((source) => source.botId)).toEqual([
       'bot-1',
       'bot-2',
       'bot-3',
       'bot-4',
       'bot-5',
-      'bot-6',
     ])
 
-    const finished = advanceToElapsed(afterAllDrops, 600)
+    const finished = advanceToElapsed(afterAllDrops, 300)
     expect(finished.lootSources.map((source) => source.botId)).toEqual([
       'bot-1',
       'bot-2',
       'bot-3',
       'bot-4',
       'bot-5',
-      'bot-6',
     ])
   })
 
   it('does not seed dropped backpacks with fixed contents', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const afterFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 1 }, catalog)
+    const afterFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 5 }, catalog)
     const droppedBackpackId = afterFirstDrop.lootSources[0]?.itemIds.find((itemId) =>
       afterFirstDrop.inventory.itemInstances[itemId]?.itemDefinitionId === 'abi-backpack_001',
     )

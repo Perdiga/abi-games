@@ -196,22 +196,11 @@ export type RuleDefinition =
       message: string
     }
 
-export interface TimePenaltyBand {
-  maxElapsedSeconds: number
-  multiplier: number
-}
-
-export interface MedalThreshold {
-  medal: 'No Medal' | 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond'
-  minimumScore: number
-}
-
 export interface RunDefinition {
   id: string
   durationSeconds: number
   botDeathSchedule: readonly number[]
-  timePenaltyBands: readonly TimePenaltyBand[]
-  medalThresholds: readonly MedalThreshold[]
+  timePenaltyGracePeriodSeconds: number
   lootGenerationMode: 'randomized_from_pool'
 }
 
@@ -263,11 +252,12 @@ export interface BotScheduleEntry {
 
 export interface ScoreBreakdown {
   grossScore: number
+  maximumPotentialScore: number
+  starRating: number
   elapsedSeconds: number
   scoringElapsedSeconds: number
-  timePenaltyMultiplier: number
+  timePenaltyPoints: number
   finalScore: number
-  medal: MedalThreshold['medal']
 }
 
 export interface BotRosterEntry {
@@ -281,6 +271,7 @@ export interface TrainingRunState {
   phase: 'PreRun' | 'LoadRunData' | 'RunActive' | 'RunEnd' | 'ScoreRun' | 'ResultsScreen'
   activePhase?: 'AwaitNextBotDeath' | 'SpawnLootDrop' | 'PlayerLooting' | 'ExtractNow'
   elapsedSeconds: number
+  maximumPotentialScore: number
   runEndReason?: 'extract' | 'time-cap'
   inventory: InventoryState
   botRoster: BotRosterEntry[]

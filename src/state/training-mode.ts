@@ -26,7 +26,6 @@ import {
   equipItemToSlot,
   getScoringElapsedSeconds,
   getStorageUnitForItem,
-  getTimePenaltyMultiplier,
   isContainerShellDefinition,
   isScorableAsLoot,
   isSupportedRotationV1,
@@ -193,7 +192,7 @@ export interface TrainingModeTimerView {
   elapsedSeconds: number
   remainingSeconds: number
   scoringElapsedSeconds: number
-  currentPenaltyMultiplier: number
+  currentTimePenaltyPoints: number
   nextBotDeathAtSeconds?: number
   formattedElapsed: string
   formattedRemaining: string
@@ -465,13 +464,14 @@ export const selectTrainingTimer = (
   const durationSeconds = definition?.durationSeconds ?? 0
   const elapsedSeconds = Math.min(state.run.elapsedSeconds, durationSeconds)
   const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds)
+  const score = scoreTrainingRun(state.run.inventory, elapsedSeconds, state.catalog, state.run.maximumPotentialScore)
 
   return {
     durationSeconds,
     elapsedSeconds,
     remainingSeconds,
-    scoringElapsedSeconds: getScoringElapsedSeconds(elapsedSeconds),
-    currentPenaltyMultiplier: getTimePenaltyMultiplier(elapsedSeconds, state.catalog),
+    scoringElapsedSeconds: getScoringElapsedSeconds(elapsedSeconds, state.catalog),
+    currentTimePenaltyPoints: score.timePenaltyPoints,
     nextBotDeathAtSeconds: state.run.pendingBotDeaths[0]?.atSeconds,
     formattedElapsed: formatClock(elapsedSeconds),
     formattedRemaining: formatClock(remainingSeconds),
@@ -485,9 +485,13 @@ export const selectPlayersRemaining = (
   total: state.run.botRoster.length,
 })
 
-export const selectCurrentSecuredValue = (
-  state: TrainingModeStoreState,
-): number => scoreTrainingRun(state.run.inventory, state.run.elapsedSeconds, state.catalog).grossScore
+export const selectCurrentSecuredValue = (state: TrainingModeStoreState): number =>
+  scoreTrainingRun(
+    state.run.inventory,
+    state.run.elapsedSeconds,
+    state.catalog,
+    state.run.maximumPotentialScore,
+  ).grossScore
 
 export const selectProjectedScoreBreakdown = (
   state: TrainingModeStoreState,
@@ -496,9 +500,10 @@ export const selectProjectedScoreBreakdown = (
   scoreTrainingRun(
     state.run.inventory,
     state.run.phase === 'ResultsScreen'
-      ? getScoringElapsedSeconds(state.run.elapsedSeconds)
+      ? getScoringElapsedSeconds(state.run.elapsedSeconds, state.catalog)
       : state.run.elapsedSeconds,
     state.catalog,
+    state.run.maximumPotentialScore,
   )
 
 export const selectTrainingResults = (

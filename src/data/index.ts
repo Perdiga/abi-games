@@ -8,8 +8,7 @@ export {
   playerStarterLoadout,
   ruleDefinitions,
   runDefinitions,
-  TRAINING_MEDAL_THRESHOLDS,
-  TRAINING_TIME_PENALTY_BANDS,
+  TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
   trainingBotLoadoutPool,
 } from './catalog'
 export type {
@@ -32,7 +31,6 @@ export type {
   ItemInstance,
   ItemStateDefinition,
   LootSource,
-  MedalThreshold,
   Rotation,
   RuleDefinition,
   RuleViolation,
@@ -40,7 +38,6 @@ export type {
   ScoreBreakdown,
   ShapeMask,
   StorageUnit,
-  TimePenaltyBand,
   TrainingRunEvent,
   TrainingRunPlayerAction,
   TrainingRunState,

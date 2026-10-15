@@ -9,6 +9,7 @@ import {
   selectStorageUnit,
   type TrainingModeStoreState,
 } from '../../state/training-mode'
+import { getItemBounds } from '../grids/gridGeometry'
 import { flattenStorageUnitTree } from '../grids/storageTree'
 import type { CellTarget, InventoryItemRecord } from '../grids/types'
 import { getItemGlyph, getItemImageSrc, getItemTint } from '../itemPresentation'
@@ -25,6 +26,27 @@ interface GroundLootPanelProps {
 }
 
 const formatValueLabel = (baseValue: number) => `Approx. value $${baseValue.toLocaleString()}`
+
+const setTooltipSide = (tile: HTMLDivElement) => {
+  const grid = tile.parentElement
+  if (!grid) {
+    return
+  }
+
+  const tileBounds = tile.getBoundingClientRect()
+  const gridBounds = grid.getBoundingClientRect()
+  const gridLeft = gridBounds.left + grid.clientLeft
+  const gridRight = gridLeft + grid.clientWidth
+  const minSideSpace = 244
+  const side =
+    gridRight - tileBounds.right >= minSideSpace
+      ? 'right'
+      : tileBounds.left - gridLeft >= minSideSpace
+        ? 'left'
+        : 'center'
+
+  tile.dataset.tooltipSide = side
+}
 
 export function GroundLootPanel(props: GroundLootPanelProps) {
   const { state, selectedItemId, onDropToGround, onItemSelect } = props
@@ -89,10 +111,23 @@ export function GroundLootPanel(props: GroundLootPanelProps) {
         ) : (
           groundLootItems.map((item) => {
             const tooltipId = `ground-loot-tooltip-${item.itemInstanceId}`
+            const bounds = getItemBounds(item)
 
             return (
-              <div className="ground-loot-panel__tile" key={item.itemInstanceId}>
+              <div
+                className="ground-loot-panel__tile"
+                key={item.itemInstanceId}
+                onFocusCapture={(event) => setTooltipSide(event.currentTarget)}
+                onPointerEnter={(event) => setTooltipSide(event.currentTarget)}
+                style={
+                  {
+                    '--loot-item-columns': String(bounds.width),
+                    '--loot-item-rows': String(bounds.height),
+                  } as CSSProperties
+                }
+              >
                 <button
+                  aria-label={item.name}
                   aria-describedby={tooltipId}
                   className={clsx(
                     'ground-loot-panel__item-card',
@@ -109,7 +144,6 @@ export function GroundLootPanel(props: GroundLootPanelProps) {
                   style={{ '--item-tint': getItemTint(item) } as CSSProperties}
                   type="button"
                 >
-                  <span className="ground-loot-panel__item-nameplate">{item.name}</span>
                   <span className="ground-loot-panel__item-art" aria-hidden="true">
                     {getItemImageSrc(item) ? <img alt="" src={getItemImageSrc(item) ?? undefined} /> : getItemGlyph(item)}
                   </span>

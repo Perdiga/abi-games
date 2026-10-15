@@ -30,7 +30,7 @@ describe('training mode store validators', () => {
     expect(selectProjectedScoreBreakdown(state)).toMatchObject({
       grossScore: 0,
       finalScore: 0,
-      medal: 'No Medal',
+      starRating: 0,
     })
   })
 
@@ -84,7 +84,7 @@ describe('training mode store validators', () => {
   it('rejects dropping an item that is already in ground loot with a clear reason', () => {
     let state = createTrainingModeStore(catalog)
     state = trainingModeReducer(state, beginTrainingRun(7))
-    state = trainingModeReducer(state, { type: 'TICK', deltaSeconds: 1 })
+    state = trainingModeReducer(state, { type: 'TICK', deltaSeconds: 5 })
 
     const groundItemId = state.run.lootSources[0]?.itemIds[0]
     expect(groundItemId).toBeDefined()

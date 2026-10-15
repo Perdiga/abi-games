@@ -44,7 +44,7 @@ export function CompartmentGrid({
     [...starts].filter((start) => start <= origin).length
 
   return (
-    <section className="inventory-panel">
+    <section className={clsx('inventory-panel', layout.regions.length > 1 && 'inventory-panel--grouped')}>
       <div
         aria-label={layout.label}
         className={clsx(
@@ -117,9 +117,8 @@ export function CompartmentGrid({
                     style={
                       {
                         '--region-fill': `color-mix(in srgb, ${region.accent} 10%, #141519)`,
-                        left: `calc(${region.originX + cell.x} * var(--cell-size) + ${
-                          hasSlotDividers ? region.originX + cell.x : columnOffset
-                        } * var(--group-gap))`,
+                        left: `calc(${region.originX + cell.x} * var(--cell-size) + ${hasSlotDividers ? region.originX + cell.x : columnOffset
+                          } * var(--group-gap))`,
                         top: `calc(${region.originY + cell.y} * var(--cell-size) + ${rowOffset} * var(--group-gap))`,
                         width: 'var(--cell-size)',
                         height: 'var(--cell-size)',
@@ -167,9 +166,8 @@ export function CompartmentGrid({
               style={
                 {
                   '--item-tint': getItemTint(record),
-                  left: `calc(${region.originX + (record.gridX ?? 0)} * var(--cell-size) + ${
-                    hasSlotDividers ? region.originX + (record.gridX ?? 0) : columnOffset
-                  } * var(--group-gap))`,
+                  left: `calc(${region.originX + (record.gridX ?? 0)} * var(--cell-size) + ${hasSlotDividers ? region.originX + (record.gridX ?? 0) : columnOffset
+                    } * var(--group-gap))`,
                   top: `calc(${region.originY + (record.gridY ?? 0)} * var(--cell-size) + ${rowOffset} * var(--group-gap))`,
                   width: `calc(${bounds.width} * var(--cell-size))`,
                   height: `calc(${bounds.height} * var(--cell-size))`,
