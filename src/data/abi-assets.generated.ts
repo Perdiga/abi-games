@@ -1832,8 +1832,8 @@ export const abiAssetItems: readonly AbiAssetItem[] = [
     "name": "Desert Eagle",
     "price": 5000,
     "assetPath": "/abi-assets/assets/pistols/pistol_001.png",
-    "widthSlots": 1,
-    "heightSlots": 2,
+    "widthSlots": 2,
+    "heightSlots": 1,
     "widthSlotsOpen": null,
     "heightSlotsOpen": null,
     "slots": null

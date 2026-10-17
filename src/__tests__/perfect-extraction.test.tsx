@@ -26,7 +26,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const start = () => fireEvent.click(screen.getByRole('button', { name: /start run/i }))
+const start = () => {
+  fireEvent.click(screen.getByRole('button', { name: /start run/i }))
+  fireEvent.click(screen.getByRole('button', { name: /^começar$/i }))
+}
 const extract = () => fireEvent.click(screen.getByRole('button', { name: /extract now/i }))
 
 describe('perfect extraction results', () => {
@@ -66,6 +69,7 @@ describe('perfect extraction results', () => {
     extract()
     const oldWorker = TestWorker.instances[0]!
     fireEvent.click(screen.getByRole('button', { name: /start another run/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^começar$/i }))
     expect(oldWorker.terminate).toHaveBeenCalled()
     act(() => oldWorker.onmessage?.(new MessageEvent('message', { data: { maximumPotentialScore: 999999 } })))
     extract()

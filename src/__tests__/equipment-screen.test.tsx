@@ -17,6 +17,7 @@ afterEach(() => { cleanup(); vi.useRealTimers() })
 
 const startRun = () => {
   fireEvent.click(screen.getByRole('button', { name: /start run/i }))
+  fireEvent.click(screen.getByRole('button', { name: /^começar$/i }))
   expect(screen.queryByTestId('start-screen')).not.toBeInTheDocument()
 }
 
