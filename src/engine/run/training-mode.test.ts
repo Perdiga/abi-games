@@ -139,14 +139,17 @@ describe('training mode run state machine', () => {
     expect(extracted.lootSources).toHaveLength(5)
   })
 
-  it('counts every bot toward perfect-extraction potential when extracting early', () => {
+  it('preserves all generated loot for optimization even when extracting early', () => {
     const started = createStartedRun()
     const afterFirstDrop = advanceToElapsed(started, 5)
     const extracted = advanceTrainingRun(afterFirstDrop, { type: 'EXTRACT_NOW' }, catalog)
 
     expect(afterFirstDrop.botRoster.filter((entry) => !entry.dropped)).toHaveLength(4)
-    expect(started.maximumPotentialScore).toBeGreaterThan(0)
-    expect(extracted.score?.maximumPotentialScore).toBe(started.maximumPotentialScore)
+    expect(started.maximumPotentialScore).toBe(0)
+    expect(started.runEndReason).toBeUndefined()
+    expect(started.perfectExtraction?.status).toBe('pending')
+    expect(started.perfectExtraction?.inventory).toBe(started.inventory)
+    expect(extracted.perfectExtraction?.inventory).toBe(started.inventory)
     expect(extracted.score?.starRating).toBe(0)
   })
 

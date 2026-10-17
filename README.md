@@ -55,6 +55,24 @@ finishes successfully.
 Use `npm run sync:assets:metadata` to update metadata without downloading images.
 This metadata-only mode does not guarantee that the referenced images exist locally.
 
+## Perfect extraction
+
+Perfect extraction is the highest gross loot value that can actually leave the
+round, not the sum of every bot's items. After the final bot drop, a local HiGHS
+WebAssembly solver searches compatible equipment combinations and legal packing
+in pockets, vests, backpacks, and nested containers. It respects individual
+compartment shapes, rotation restrictions, and the backpack nesting limit.
+Container shells remain unscored, matching the regular extraction score.
+
+The reference uses the original loot of all five bots, independently of the
+player's moves or discarded items. Early extraction still uses this full-round
+reference. Time penalties affect the final score, not the perfect gross value.
+
+Optimization runs in a Web Worker so inventory interactions remain responsive.
+Results show a calculating state until the optimum is proven, then update the
+percentage and stars. If solving fails or exceeds its 120-second limit, the
+reference is shown as unavailable rather than displaying a total or an estimate.
+
 ## Working areas
 
 - `src/data/` — static catalog and layout definitions

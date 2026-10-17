@@ -72,6 +72,7 @@ export type TrainingModeActionValidation =
 
 export type TrainingModeAction =
   | { type: 'BEGIN_RUN'; seed?: number }
+  | { type: 'RESOLVE_PERFECT_EXTRACTION'; inventory: TrainingRunState['inventory']; maximumPotentialScore?: number }
   | { type: 'TICK'; deltaSeconds: number; queuedAction?: TrainingRunPlayerAction }
   | {
       type: 'MOVE_ITEM'
@@ -228,6 +229,25 @@ export const applyTrainingModeAction = (
   catalog: CatalogIndex,
 ): TrainingModeStoreState => {
   switch (action.type) {
+    case 'RESOLVE_PERFECT_EXTRACTION': {
+      const perfectExtraction = state.run.perfectExtraction
+      if (!perfectExtraction || perfectExtraction.inventory !== action.inventory || perfectExtraction.status !== 'pending') return state
+      const maximumPotentialScore = action.maximumPotentialScore
+      if (maximumPotentialScore === undefined || !Number.isFinite(maximumPotentialScore) || maximumPotentialScore < 0) {
+        return { ...state, run: { ...state.run, perfectExtraction: { ...perfectExtraction, status: 'error' } } }
+      }
+      return {
+        ...state,
+        run: {
+          ...state.run,
+          maximumPotentialScore,
+          perfectExtraction: { ...perfectExtraction, status: 'ready' },
+          score: state.run.score
+            ? scoreTrainingRun(state.run.inventory, state.run.elapsedSeconds, catalog, maximumPotentialScore)
+            : undefined,
+        },
+      }
+    }
     case 'BEGIN_RUN':
       return beginRunReducer(state, action.seed, catalog)
     case 'TICK':

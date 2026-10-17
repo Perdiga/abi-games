@@ -21,10 +21,8 @@ import {
   createEmptyInventoryState,
   createItemInstance,
   equipItemToSlot,
-  getContainedItemIdsDeep,
   getChildItems,
   getStorageUnitForItem,
-  isScorableAsLoot,
 } from '../inventory'
 
 const defaultCatalog = createCatalogIndex()
@@ -127,24 +125,6 @@ export const scoreTrainingRun = (
   }
 }
 
-const getScorableValueForItemRoots = (
-  inventory: InventoryState,
-  rootItemIds: readonly string[],
-  catalog: CatalogIndex,
-): number => {
-  const itemIds = new Set<string>()
-  for (const itemId of rootItemIds) {
-    itemIds.add(itemId)
-    getContainedItemIdsDeep(inventory, itemId).forEach((childId) => itemIds.add(childId))
-  }
-
-  return [...itemIds].reduce((score, itemId) => {
-    const item = inventory.itemInstances[itemId]
-    const definition = item ? catalog.itemDefinitionsById[item.itemDefinitionId] : undefined
-    return item && definition && isScorableAsLoot(item, catalog) ? score + definition.baseValue : score
-  }, 0)
-}
-
 const loadRunData = (
   state: TrainingRunState,
   catalog: CatalogIndex,
@@ -155,7 +135,6 @@ const loadRunData = (
   let inventory = createEmptyInventoryState(catalog)
   const playerLoadout = seedLoadout(inventory, playerStarterLoadout, 'player', catalog, 'player')
   inventory = playerLoadout.inventory
-  const potentialItemIds = [...playerLoadout.topLevelItemIds]
 
   const botRoster: BotRosterEntry[] = []
 
@@ -164,17 +143,16 @@ const loadRunData = (
     const template = createRandomBotLoadout(catalog, rng, botId)
     const seeded = seedLoadout(inventory, template, botId, catalog, botId)
     inventory = seeded.inventory
-    potentialItemIds.push(...seeded.topLevelItemIds)
     botRoster.push({ botId, topLevelItemIds: seeded.topLevelItemIds, dropped: false })
   })
-  const maximumPotentialScore = getScorableValueForItemRoots(inventory, potentialItemIds, catalog)
 
   return {
     ...state,
     phase: 'RunActive',
     activePhase: 'AwaitNextBotDeath',
     inventory,
-    maximumPotentialScore,
+    maximumPotentialScore: 0,
+    perfectExtraction: { inventory, status: 'pending' },
     botRoster,
     pendingBotDeaths: definition.botDeathSchedule.map((atSeconds, index) => ({
       botId: `bot-${index + 1}`,

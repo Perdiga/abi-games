@@ -273,6 +273,10 @@ export interface TrainingRunState {
   elapsedSeconds: number
   maximumPotentialScore: number
   runEndReason?: 'extract' | 'time-cap'
+  perfectExtraction?: {
+    inventory: InventoryState
+    status: 'pending' | 'ready' | 'error'
+  }
   inventory: InventoryState
   botRoster: BotRosterEntry[]
   pendingBotDeaths: BotScheduleEntry[]

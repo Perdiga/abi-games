@@ -2,6 +2,7 @@ import './App.css'
 import { useEffect, useMemo, useReducer } from 'react'
 
 import { EquipmentScreen } from './components/equipment-screen/EquipmentScreen'
+import { usePerfectExtraction } from './state/usePerfectExtraction'
 import {
   beginTrainingRun,
   createTrainingModeStore,
@@ -19,9 +20,11 @@ export interface AppProps {
 
 function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
   const [state, dispatch] = useReducer(trainingModeReducer, createTrainingModeStore())
+  usePerfectExtraction(state, dispatch)
   const status = useMemo(() => selectTrainingStatus(state), [state])
   const timer = useMemo(() => selectTrainingTimer(state), [state])
   const results = useMemo(() => selectTrainingResults(state), [state])
+  const perfectExtractionStatus = state.run.perfectExtraction?.status
 
   useEffect(() => {
     if (!status.isInteractive) {
@@ -64,15 +67,21 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
             <div className="app-results-screen__value">
               <p>Extracted value</p>
               <strong>${results.grossScore.toLocaleString()}</strong>
-              <span>of ${results.maximumPotentialScore.toLocaleString()} possible</span>
+              {perfectExtractionStatus === 'ready' ? (
+                <span>of ${results.maximumPotentialScore.toLocaleString()} possible</span>
+              ) : (
+                <span role="status">{perfectExtractionStatus === 'error' ? 'Perfect extraction unavailable.' : 'Calculating perfect extraction…'}</span>
+              )}
             </div>
-            <div className="app-results-screen__rating">
-              <p aria-label={`${results.starRating} out of 5 stars`} className="app-results-screen__stars">
-                <span aria-hidden="true">{'★'.repeat(results.starRating)}{'☆'.repeat(5 - results.starRating)}</span>
-                <strong>{results.starRating}/5</strong>
-              </p>
-              <p className="app-results-screen__percentage">{extractedPercentage}% of possible value</p>
-            </div>
+            {perfectExtractionStatus === 'ready' && (
+              <div className="app-results-screen__rating">
+                <p aria-label={`${results.starRating} out of 5 stars`} className="app-results-screen__stars">
+                  <span aria-hidden="true">{'★'.repeat(results.starRating)}{'☆'.repeat(5 - results.starRating)}</span>
+                  <strong>{results.starRating}/5</strong>
+                </p>
+                <p className="app-results-screen__percentage">{extractedPercentage}% of possible value</p>
+              </div>
+            )}
           </section>
 
           <dl className="app-results-screen__metrics">

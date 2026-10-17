@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createCatalogIndex } from '../data'
+import { addItemInstance, createItemInstance, equipItemToSlot } from '../engine/inventory'
 import {
   beginTrainingRun,
   createTrainingModeStore,
@@ -19,6 +20,40 @@ import {
 const catalog = createCatalogIndex()
 
 describe('training mode store validators', () => {
+  it('updates the extraction reference and stars when optimization finishes after the results screen opens', () => {
+    let state = trainingModeReducer(createTrainingModeStore(catalog), beginTrainingRun(7))
+    const snapshot = state.run.perfectExtraction!.inventory
+    const pistol = createItemInstance('weapon-pistol-service', catalog, { id: 'secured-pistol', ownerEntityId: 'player' })
+    const inventory = addItemInstance(state.run.inventory, pistol, catalog)
+    const equipped = equipItemToSlot(inventory, pistol.id, 'pistol', catalog)
+    expect(equipped.ok).toBe(true)
+    if (!equipped.ok) return
+    state = { ...state, run: { ...state.run, inventory: equipped.state, elapsedSeconds: 165 } }
+    state = trainingModeReducer(state, extractTrainingRunNow())
+    const before = state.run.score!
+    const maximum = before.grossScore * 2
+    state = trainingModeReducer(state, { type: 'RESOLVE_PERFECT_EXTRACTION', inventory: snapshot, maximumPotentialScore: maximum })
+    expect(state.run.perfectExtraction?.status).toBe('ready')
+    expect(state.run.score).toMatchObject({ ...before, maximumPotentialScore: maximum, starRating: 2 })
+    expect(state.run.perfectExtraction?.inventory).toBe(snapshot)
+  })
+
+  it('ignores optimization results belonging to a previous run', () => {
+    const first = trainingModeReducer(createTrainingModeStore(catalog), beginTrainingRun(7))
+    const extracted = trainingModeReducer(first, extractTrainingRunNow())
+    const restarted = trainingModeReducer(extracted, beginTrainingRun(42))
+    expect(trainingModeReducer(restarted, {
+      type: 'RESOLVE_PERFECT_EXTRACTION', inventory: first.run.perfectExtraction!.inventory, maximumPotentialScore: 999999,
+    })).toBe(restarted)
+  })
+
+  it('marks failed optimization as unavailable rather than inventing a perfect value', () => {
+    const state = trainingModeReducer(createTrainingModeStore(catalog), beginTrainingRun(7))
+    const failed = trainingModeReducer(state, { type: 'RESOLVE_PERFECT_EXTRACTION', inventory: state.run.perfectExtraction!.inventory })
+    expect(failed.run.perfectExtraction?.status).toBe('error')
+    expect(failed.run.maximumPotentialScore).toBe(0)
+  })
+
   it('starts a run with the player starter loadout, no secured storage, and zero projected score', () => {
     let state = createTrainingModeStore(catalog)
     state = trainingModeReducer(state, beginTrainingRun(7))
