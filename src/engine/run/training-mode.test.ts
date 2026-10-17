@@ -107,14 +107,12 @@ describe('training mode run state machine', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
 
     expect(started.phase).toBe('RunActive')
-    expect(started.activePhase).toBe('AwaitNextBotDeath')
-    expect(started.pendingBotDeaths).toHaveLength(5)
+    expect(started.activePhase).toBe('PlayerLooting')
+    expect(started.pendingBotDeaths).toHaveLength(4)
+    expect(started.lootSources).toHaveLength(1)
 
-    const beforeFirstDrop = advanceToElapsed(started, 4.999)
-    expect(beforeFirstDrop.lootSources).toHaveLength(0)
-
-    const afterFirstDrop = advanceToElapsed(started, 5)
-    expect(afterFirstDrop.lootSources).toHaveLength(1)
+    const afterFirstDrop = advanceToElapsed(started, 10)
+    expect(afterFirstDrop.lootSources).toHaveLength(2)
     expect(afterFirstDrop.activePhase).toBe('PlayerLooting')
     expect(afterFirstDrop.phaseHistory).toContain('RunActive:SpawnLootDrop')
 
@@ -167,9 +165,8 @@ describe('training mode run state machine', () => {
     })
   })
 
-  it('fires the five bot deaths every five seconds, with no further drops', () => {
+  it('fires the first bot death at zero, then the remaining deaths on schedule', () => {
     let state = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    state = advanceToElapsed(state, 5)
     expect(state.lootSources).toHaveLength(1)
 
     const checkpoints = [
@@ -235,8 +232,8 @@ describe('training mode run state machine', () => {
 
   it('resolves a queued Extract Now action before a same-tick bot death', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
-    const beforeFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 4 }, catalog)
-    expect(beforeFirstDrop.lootSources).toHaveLength(0)
+    const beforeFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 9 }, catalog)
+    expect(beforeFirstDrop.lootSources).toHaveLength(1)
 
     const extractedOnDeathTick = advanceTrainingRun(
       beforeFirstDrop,
@@ -246,7 +243,8 @@ describe('training mode run state machine', () => {
 
     expect(extractedOnDeathTick.phase).toBe('ResultsScreen')
     expect(extractedOnDeathTick.runEndReason).toBe('extract')
-    expect(extractedOnDeathTick.lootSources).toHaveLength(0)
+    expect(extractedOnDeathTick.lootSources).toHaveLength(1)
+    expect(extractedOnDeathTick.lootSources[0]?.botId).toBe('bot-1')
     expect(extractedOnDeathTick.phaseHistory).toContain('RunActive:ExtractNow')
   })
 

@@ -44,7 +44,7 @@ describe('equipment screen shell', () => {
   it('starts with the player starter loadout and exposes the run HUD', () => {
     vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun()
     expect(screen.getByTestId('secured-value')).toHaveTextContent('$0')
-    expect(screen.getByTestId('players-remaining')).toHaveTextContent('5 / 5 players remaining')
+    expect(screen.getByTestId('players-remaining')).toHaveTextContent('4 / 5 players remaining')
     expect(screen.getByTestId('ground-loot-grid')).toBeInTheDocument()
     expect(screen.queryByTestId('slot-target-helmetFaceShield')).not.toBeInTheDocument()
   })

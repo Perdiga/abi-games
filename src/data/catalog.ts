@@ -925,7 +925,7 @@ export const runDefinitions: readonly RunDefinition[] = [
   {
     id: 'training-mode-v1',
     durationSeconds: 300,
-    botDeathSchedule: [5, 10, 15, 20, 25],
+    botDeathSchedule: [0, 10, 15, 20, 25],
     timePenaltyGracePeriodSeconds: TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
     lootGenerationMode: 'randomized_from_pool',
   },
