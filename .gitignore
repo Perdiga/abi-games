@@ -11,3 +11,4 @@
 node_modules/
 public/abi-assets/
 infrastructure/.terraform
+dist/abi-assets/*
