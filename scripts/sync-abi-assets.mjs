@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 const DATABASE_URL = 'https://perdiga.github.io/abi-assets-database'
@@ -23,8 +23,9 @@ const JSON_FILES = [
   'weapons.json',
 ]
 
-const fetchRequired = async (path) => {
+const fetchRequired = async (path, { allowMissing = false } = {}) => {
   const response = await fetch(`${DATABASE_URL}/${path}`, { cache: 'no-store' })
+  if (allowMissing && response.status === 404) return null
   if (!response.ok) throw new Error(`Could not download ${path}: HTTP ${response.status}`)
   return response
 }
@@ -41,7 +42,8 @@ const syncImage = async (assetPath) => {
   const outputPath = join(OUTPUT_ROOT, assetPath)
   if (await exists(outputPath)) return false
 
-  const response = await fetchRequired(assetPath)
+  const response = await fetchRequired(assetPath, { allowMissing: true })
+  if (!response) return null
   await writeAsset(assetPath, Buffer.from(await response.arrayBuffer()))
   return true
 }
@@ -87,21 +89,32 @@ const items = itemGroups.flat().map((item) => ({
 }))
 
 await mkdir(dirname(GENERATED_CATALOG_PATH), { recursive: true })
-await writeFile(GENERATED_CATALOG_PATH, toGeneratedSource(items))
 
 if (METADATA_ONLY) {
+  await writeFile(GENERATED_CATALOG_PATH, toGeneratedSource(items))
   console.log(`Synced metadata for ${items.length} ABI assets.`)
   process.exit(0)
 }
 
 const imagePaths = [...new Set(items.map((item) => item.assetPath?.replace('/abi-assets/', '')).filter(Boolean))]
 let downloadedImages = 0
+const missingImages = new Set()
 console.log(`Syncing ${imagePaths.length} ABI asset images…`)
 await mapWithConcurrency(imagePaths, 12, async (assetPath) => {
-  if (await syncImage(assetPath)) {
+  const downloaded = await syncImage(assetPath)
+  if (downloaded === null) {
+    missingImages.add(assetPath)
+    console.warn(`Image not found upstream (HTTP 404): ${assetPath}; using the default item icon.`)
+  } else if (downloaded) {
     downloadedImages += 1
     if (downloadedImages % 10 === 0) console.log(`Downloaded ${downloadedImages} new images…`)
   }
 })
 
+const syncedItems = items.map((item) => (
+  missingImages.has(item.assetPath?.replace('/abi-assets/', '')) ? { ...item, assetPath: null } : item
+))
+await writeFile(GENERATED_CATALOG_PATH, toGeneratedSource(syncedItems))
+
 console.log(`Synced ${items.length} ABI assets and downloaded ${downloadedImages} new images.`)
+if (missingImages.size > 0) console.warn(`${missingImages.size} images are unavailable upstream; their items use default icons.`)

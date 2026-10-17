@@ -42,6 +42,19 @@ npm run build
 npm run lint
 ```
 
+## ABI assets
+
+Run `npm run sync:assets` to refresh the catalog and download missing images.
+The sync reads metadata and images directly from the source repository on GitHub
+to avoid stale GitHub Pages metadata referencing images that have moved.
+Images returning HTTP 404 produce a warning and a null image path in the generated
+catalog, allowing the UI to use its default item icon. Other download failures
+still stop the sync. The generated catalog is written only after image processing
+finishes successfully.
+
+Use `npm run sync:assets:metadata` to update metadata without downloading images.
+This metadata-only mode does not guarantee that the referenced images exist locally.
+
 ## Working areas
 
 - `src/data/` — static catalog and layout definitions

@@ -1,0 +1,6 @@
+account_id = "YOUR_32_CHARACTER_ACCOUNT_ID"
+project_name = "abi-games"
+production_branch = "main"
+
+custom_domain = "games.jarbas.dev.br"
+zone_id = null
