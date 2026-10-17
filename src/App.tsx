@@ -1,5 +1,5 @@
 import './App.css'
-import { useEffect, useMemo, useReducer } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 
 import { EquipmentScreen } from './components/equipment-screen/EquipmentScreen'
 import { usePerfectExtraction } from './state/usePerfectExtraction'
@@ -18,8 +18,28 @@ export interface AppProps {
   tickIntervalMs?: number
 }
 
+const RULES_DISMISSED_STORAGE_KEY = 'abi-tetris:stash-training-rules-dismissed'
+
+const hasDismissedRules = (): boolean => {
+  try {
+    return window.localStorage?.getItem(RULES_DISMISSED_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const saveRulesDismissal = (): void => {
+  try {
+    window.localStorage?.setItem(RULES_DISMISSED_STORAGE_KEY, 'true')
+  } catch {
+    // The briefing still works when browser storage is unavailable.
+  }
+}
+
 function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
   const [state, dispatch] = useReducer(trainingModeReducer, createTrainingModeStore())
+  const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false)
+  const [skipRulesNextTime, setSkipRulesNextTime] = useState(false)
   usePerfectExtraction(state, dispatch)
   const status = useMemo(() => selectTrainingStatus(state), [state])
   const timer = useMemo(() => selectTrainingTimer(state), [state])
@@ -42,6 +62,26 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
     results && results.maximumPotentialScore > 0
       ? Math.min(100, Math.round((results.grossScore / results.maximumPotentialScore) * 100))
       : 0
+
+  const beginRun = () => {
+    dispatch(beginTrainingRun(startSeed))
+  }
+
+  const requestRunStart = () => {
+    if (hasDismissedRules()) {
+      beginRun()
+      return
+    }
+    setIsRulesDialogOpen(true)
+  }
+
+  const handleRulesDialogStart = () => {
+    if (skipRulesNextTime) {
+      saveRulesDismissal()
+    }
+    setIsRulesDialogOpen(false)
+    beginRun()
+  }
 
   return (
     <main className="app-shell">
@@ -96,7 +136,7 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
           </dl>
 
           <footer className="app-results-screen__footer">
-            <button className="app-card__action" onClick={() => dispatch(beginTrainingRun(startSeed))} type="button">
+            <button className="app-card__action" onClick={requestRunStart} type="button">
               Start another run
             </button>
           </footer>
@@ -133,7 +173,7 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
               </dl>
               <button
                 className="app-card__action app-mode__action"
-                onClick={() => dispatch(beginTrainingRun(startSeed))}
+                onClick={requestRunStart}
                 type="button"
               >
                 Start Run
@@ -183,6 +223,39 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
             </article>
           </div>
         </section>
+      )}
+      {isRulesDialogOpen && (
+        <div className="app-rules-modal" role="presentation">
+          <section aria-labelledby="rules-dialog-title" aria-modal="true" className="app-rules-modal__dialog" role="dialog">
+            <header className="app-rules-modal__header">
+              <p className="app-card__kicker">Stash Training / Briefing</p>
+              <h2 id="rules-dialog-title">Regras da operação</h2>
+            </header>
+            <div className="app-rules-modal__content">
+              <p>Organize o loot dos bots no seu equipamento e extraia antes que o tempo termine.</p>
+              <ul>
+                <li>Você tem 5 minutos; novos drops aparecem conforme os bots são eliminados.</li>
+                <li>5 bots serão elimidados nos primeiros 30 segundos.</li>
+                <li>Itens só podem ser colocados em espaços compatíveis e sem sobreposição.</li>
+                <li>Gire itens compatíveis com <kbd>R</kbd> para encaixá-los melhor.</li>
+                <li>Extraia quando estiver pronto: o valor protegido, menos o tempo gasto, define sua pontuação.</li>
+              </ul>
+              <label className="app-rules-modal__preference">
+                <input
+                  checked={skipRulesNextTime}
+                  onChange={(event) => setSkipRulesNextTime(event.target.checked)}
+                  type="checkbox"
+                />
+                Não mostrar novamente
+              </label>
+            </div>
+            <footer className="app-rules-modal__footer">
+              <button autoFocus className="app-card__action" onClick={handleRulesDialogStart} type="button">
+                Começar
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </main>
   )
