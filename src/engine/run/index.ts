@@ -62,7 +62,20 @@ export const advanceTrainingRun = (
 ): TrainingRunState => {
   switch (event.type) {
     case 'BEGIN_RUN':
-      return state.phase === 'PreRun' ? loadRunData(state, catalog, event.seed) : state
+      if (state.phase !== 'PreRun') {
+        return state
+      }
+
+      // Resolve drops scheduled for second zero as part of starting the run.
+      {
+        const startedRun = advanceRunTime(loadRunData(state, catalog, event.seed), 0, catalog)
+        return {
+          ...startedRun,
+          perfectExtraction: startedRun.perfectExtraction
+            ? { ...startedRun.perfectExtraction, inventory: startedRun.inventory }
+            : undefined,
+        }
+      }
     case 'ADVANCE_TIME':
       return event.deltaSeconds <= 0 ? state : advanceRunTime(state, event.deltaSeconds, catalog, event.queuedAction)
     case 'EXTRACT_NOW':
