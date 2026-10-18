@@ -1,10 +1,13 @@
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import sharp from 'sharp'
 
 const DATABASE_URL = 'https://perdiga.github.io/abi-assets-database'
 const OUTPUT_ROOT = join(process.cwd(), 'public', 'abi-assets')
 const GENERATED_CATALOG_PATH = join(process.cwd(), 'src', 'data', 'abi-assets.generated.ts')
 const METADATA_ONLY = process.argv.includes('--metadata-only')
+const ITEM_IMAGE_MAX_DIMENSION = 512
+const ITEM_IMAGE_WEBP_QUALITY = 80
 const JSON_FILES = [
   'backpacks.json',
   'ballistic_rigs.json',
@@ -38,13 +41,30 @@ const writeAsset = async (relativePath, body) => {
 
 const exists = async (path) => stat(path).then(() => true).catch(() => false)
 
-const syncImage = async (assetPath) => {
-  const outputPath = join(OUTPUT_ROOT, assetPath)
-  if (await exists(outputPath)) return false
+const optimizedImagePath = (assetPath) => assetPath.replace(/\.[^.]+$/, '.webp')
 
-  const response = await fetchRequired(assetPath, { allowMissing: true })
-  if (!response) return null
-  await writeAsset(assetPath, Buffer.from(await response.arrayBuffer()))
+const syncImage = async (assetPath) => {
+  const sourcePath = join(OUTPUT_ROOT, assetPath)
+  const optimizedPath = optimizedImagePath(assetPath)
+  const outputPath = join(OUTPUT_ROOT, optimizedPath)
+  if (await exists(outputPath)) {
+    if (sourcePath !== outputPath) await rm(sourcePath, { force: true })
+    return false
+  }
+
+  const source = await exists(sourcePath)
+    ? await readFile(sourcePath)
+    : await fetchRequired(assetPath, { allowMissing: true }).then(async (response) => (
+      response ? Buffer.from(await response.arrayBuffer()) : null
+    ))
+  if (!source) return null
+
+  const optimized = await sharp(source)
+    .resize(ITEM_IMAGE_MAX_DIMENSION, ITEM_IMAGE_MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: ITEM_IMAGE_WEBP_QUALITY, alphaQuality: ITEM_IMAGE_WEBP_QUALITY, effort: 6 })
+    .toBuffer()
+  await writeAsset(optimizedPath, optimized)
+  if (sourcePath !== outputPath) await rm(sourcePath, { force: true })
   return true
 }
 
@@ -112,7 +132,11 @@ await mapWithConcurrency(imagePaths, 12, async (assetPath) => {
 })
 
 const syncedItems = items.map((item) => (
-  missingImages.has(item.assetPath?.replace('/abi-assets/', '')) ? { ...item, assetPath: null } : item
+  missingImages.has(item.assetPath?.replace('/abi-assets/', ''))
+    ? { ...item, assetPath: null }
+    : item.assetPath
+      ? { ...item, assetPath: `/abi-assets/${optimizedImagePath(item.assetPath.replace('/abi-assets/', ''))}` }
+      : item
 ))
 await writeFile(GENERATED_CATALOG_PATH, toGeneratedSource(syncedItems))
 
