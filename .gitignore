@@ -13,3 +13,4 @@ public/abi-assets/
 infrastructure/.terraform
 dist/abi-assets/*
 dist/*
+src/data/abi-assets.generated.ts
