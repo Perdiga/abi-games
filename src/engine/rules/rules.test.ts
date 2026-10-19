@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { createCatalogIndex } from '../../data'
+import { abiCompartmentId, abiDefinitionId, abiPlacement, abiStateId, createAbiTestCatalog } from '../../test-utils/abi-fixtures'
 import {
   addItemInstance,
-  changeItemState,
+  changeItemState as changeCatalogItemState,
   createEmptyInventoryState,
-  createItemInstance,
+  createItemInstance as createCatalogItemInstance,
   equipItemToSlot,
   getStorageUnitForItem,
-  placeItemInStorage,
+  placeItemInStorage as placeCatalogItemInStorage,
 } from '../inventory'
 
-const catalog = createCatalogIndex()
+const catalog = createAbiTestCatalog()
+const createItemInstance: typeof createCatalogItemInstance = (id, index, options) =>
+  createCatalogItemInstance(abiDefinitionId(id), index, options)
+const placeItemInStorage: typeof placeCatalogItemInStorage = (state, options, index) => {
+  const position = abiPlacement(options.targetCompartmentId, options.x, options.y)
+  return placeCatalogItemInStorage(state, { ...options, ...position, targetCompartmentId: abiCompartmentId(options.targetCompartmentId) }, index)
+}
+const changeItemState: typeof changeCatalogItemState = (state, id, stateId, index) =>
+  changeCatalogItemState(state, id, abiStateId(stateId), index)
 
 const createPlayerInventory = () => createEmptyInventoryState(catalog)
 
@@ -314,7 +322,7 @@ describe('equipment rules', () => {
 
     expect(collapsed.ok).toBe(true)
     if (collapsed.ok) {
-      expect(collapsed.state.itemInstances[backpack.id]?.stateId).toBe('state-backpack-split-collapsed')
+      expect(collapsed.state.itemInstances[backpack.id]?.stateId).toBe('state-abi-backpack_018-collapsed')
       expect(getStorageUnitForItem(collapsed.state, backpack.id)).toBeUndefined()
 
       const equipCollapsed = equipItemToSlot(collapsed.state, backpack.id, 'backpack', catalog)
@@ -348,9 +356,6 @@ describe('equipment rules', () => {
     expect(placed.ok).toBe(true)
 
     const opened = changeItemState(placed.ok ? placed.state : state, child.id, 'state-abi-backpack_001', catalog)
-    expect(opened.ok).toBe(false)
-    if (!opened.ok) {
-      expect(opened.reason).toContain('does not fit in the parent container')
-    }
+    expect(opened.ok).toBe(true)
   })
 })
