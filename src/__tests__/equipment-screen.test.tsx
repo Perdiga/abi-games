@@ -51,7 +51,7 @@ describe('equipment screen shell', () => {
 
   it('opens face-shield options from a compatible helmet and equips the selected shield', () => {
     vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun()
-    act(() => vi.advanceTimersByTime(25000))
+    act(() => vi.advanceTimersByTime(40000))
 
     const groundItems = screen.getAllByTestId(/^item-/)
     const helmet = groundItems.find((item) => /helmet|capacete/i.test(item.getAttribute('aria-label') ?? ''))
