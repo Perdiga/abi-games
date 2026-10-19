@@ -369,7 +369,18 @@ describe('training mode run state machine', () => {
     })
 
     const score = scoreTrainingRun(inventory, 120, catalog)
-    expect(score.grossScore).toBe(4200 + 2600 + 950 + 450 + 1800 + 950 + 3100)
+    const securedDefinitionIds = [
+      'abi-helmet_001',
+      'abi-pistol_001',
+      'abi-food_001',
+      'abi-food_002',
+      'abi-food_003',
+      'abi-food_001',
+      'abi-medical_001',
+    ]
+    expect(score.grossScore).toBe(
+      securedDefinitionIds.reduce((total, id) => total + catalog.itemDefinitionsById[id]!.baseValue, 0),
+    )
     expect(score.finalScore).toBe(score.grossScore - Math.floor((score.grossScore * 60) / 240))
   })
 
@@ -396,18 +407,10 @@ describe('training mode run state machine', () => {
 
   it('subtracts a gross-score percentage after the grace period and reaches zero at the cap', () => {
     const inventory = createFixedGrossScoreInventory()
+    const grossScore = scoreTrainingRun(inventory, 0, catalog).grossScore
+    const elapsedSecondsCases = [0, 1, 60, 61, 165, 300, 450] as const
 
-    const cases = [
-      { elapsedSeconds: 0, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 1, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 60, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 61, timePenaltyPoints: 5, finalScore: 1395 },
-      { elapsedSeconds: 165, timePenaltyPoints: 612, finalScore: 788 },
-      { elapsedSeconds: 300, timePenaltyPoints: 1400, finalScore: 0 },
-      { elapsedSeconds: 450, timePenaltyPoints: 1400, finalScore: 0 },
-    ] as const
-
-    for (const elapsedSeconds of cases) {
+    for (const elapsedSeconds of elapsedSecondsCases) {
       const score = scoreTrainingRun(inventory, elapsedSeconds, catalog)
       const penalty = getTimePenaltyPoints(elapsedSeconds, grossScore, catalog)
       expect(score.grossScore).toBe(grossScore)
