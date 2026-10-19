@@ -369,7 +369,7 @@ describe('training mode run state machine', () => {
     })
 
     const score = scoreTrainingRun(inventory, 120, catalog)
-    expect(score.grossScore).toBeGreaterThan(0)
+    expect(score.grossScore).toBe(4200 + 2600 + 950 + 450 + 1800 + 950 + 3100)
     expect(score.finalScore).toBe(score.grossScore - Math.floor((score.grossScore * 60) / 240))
   })
 
@@ -397,8 +397,15 @@ describe('training mode run state machine', () => {
   it('subtracts a gross-score percentage after the grace period and reaches zero at the cap', () => {
     const inventory = createFixedGrossScoreInventory()
 
-    const cases = [0, 1, 60, 61, 165, 300, 450] as const
-    const grossScore = scoreTrainingRun(inventory, 0, catalog).grossScore
+    const cases = [
+      { elapsedSeconds: 0, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 1, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 60, timePenaltyPoints: 0, finalScore: 1400 },
+      { elapsedSeconds: 61, timePenaltyPoints: 5, finalScore: 1395 },
+      { elapsedSeconds: 165, timePenaltyPoints: 612, finalScore: 788 },
+      { elapsedSeconds: 300, timePenaltyPoints: 1400, finalScore: 0 },
+      { elapsedSeconds: 450, timePenaltyPoints: 1400, finalScore: 0 },
+    ] as const
 
     for (const elapsedSeconds of cases) {
       const score = scoreTrainingRun(inventory, elapsedSeconds, catalog)
@@ -432,9 +439,9 @@ describe('training mode run state machine', () => {
       { elapsedSeconds: 0.1, flooredSeconds: 0, penaltyPoints: 0 },
       { elapsedSeconds: 1.9, flooredSeconds: 1, penaltyPoints: 0 },
       { elapsedSeconds: 60.9, flooredSeconds: 60, penaltyPoints: 0 },
-      { elapsedSeconds: 61.9, flooredSeconds: 61 },
-      { elapsedSeconds: 165.9, flooredSeconds: 165 },
-      { elapsedSeconds: 300.9, flooredSeconds: 300 },
+      { elapsedSeconds: 61.9, flooredSeconds: 61, penaltyPoints: 5 },
+      { elapsedSeconds: 165.9, flooredSeconds: 165, penaltyPoints: 612 },
+      { elapsedSeconds: 300.9, flooredSeconds: 300, penaltyPoints: 1400 },
     ] as const
 
     for (const testCase of cases) {
