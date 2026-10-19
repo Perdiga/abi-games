@@ -266,6 +266,11 @@ export interface BotRosterEntry {
   dropped: boolean
 }
 
+export interface PerfectExtractionItem {
+  itemDefinitionId: string
+  count: number
+}
+
 export interface TrainingRunState {
   definitionId: string
   phase: 'PreRun' | 'LoadRunData' | 'RunActive' | 'RunEnd' | 'ScoreRun' | 'ResultsScreen'
@@ -276,6 +281,7 @@ export interface TrainingRunState {
   perfectExtraction?: {
     inventory: InventoryState
     status: 'pending' | 'ready' | 'error'
+    items?: readonly PerfectExtractionItem[]
   }
   inventory: InventoryState
   botRoster: BotRosterEntry[]

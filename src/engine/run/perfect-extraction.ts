@@ -1,9 +1,14 @@
 import type { LegacyHighs } from 'highs'
-import type { CatalogIndex, EquipmentSlotId, InventoryState, ItemDefinition, ItemStateDefinition } from '../../data'
+import type { CatalogIndex, EquipmentSlotId, InventoryState, ItemDefinition, ItemStateDefinition, PerfectExtractionItem } from '../../data'
 import { getOccupiedCells, rotateMask, validatePlacement } from '../geometry'
 import { isScorableAsLoot } from '../inventory'
 
 type Term = readonly [number, string]
+
+export interface PerfectExtractionResult {
+  maximumPotentialScore: number
+  items: readonly PerfectExtractionItem[]
+}
 
 interface Candidate {
   definition: ItemDefinition
@@ -31,11 +36,11 @@ const expression = (terms: readonly Term[]): string => terms.length === 0 ? '0' 
   .join(' ')
   .replace(/^\+ /, '')
 
-export const calculatePerfectExtraction = (
+export const calculatePerfectExtractionResult = (
   inventory: InventoryState,
   catalog: CatalogIndex,
   solver: LegacyHighs,
-): number => {
+): PerfectExtractionResult => {
   let variableCount = 0
   const binary: string[] = []
   const integer: string[] = []
@@ -82,7 +87,7 @@ export const calculatePerfectExtraction = (
     candidates.push(candidate)
   }
 
-  if (!candidates.some((candidate) => candidate.value > 0)) return 0
+  if (!candidates.some((candidate) => candidate.value > 0)) return { maximumPotentialScore: 0, items: [] }
 
   const containers = candidates.filter((candidate) => candidate.states.some((state) => state.definition.containerLayoutId))
   const depthLimit = containers.length + 1
@@ -212,5 +217,28 @@ export const calculatePerfectExtraction = (
   ].join('\n')
   const solution = solver.solve(model, { mip_rel_gap: 0, mip_abs_gap: 0, time_limit: 120 })
   if (solution.Status !== 'Optimal') throw new Error(`Perfect extraction could not be proven: ${solution.Status}`)
-  return objective.reduce((value, [coefficient, name]) => value + coefficient * Math.round(solution.Columns[name]!.Primal), 0)
+  const itemsByDefinitionId = new Map<string, number>()
+  for (const candidate of candidates) {
+    const count = candidate.states.reduce(
+      (total, state) => total + Math.round(solution.Columns[state.selected]!.Primal),
+      0,
+    )
+    if (count > 0) itemsByDefinitionId.set(candidate.definition.id, (itemsByDefinitionId.get(candidate.definition.id) ?? 0) + count)
+  }
+
+  return {
+    maximumPotentialScore: objective.reduce((value, [coefficient, name]) => value + coefficient * Math.round(solution.Columns[name]!.Primal), 0),
+    items: [...itemsByDefinitionId.entries()]
+      .map(([itemDefinitionId, count]) => ({ itemDefinitionId, count }))
+      .sort((left, right) => (
+        (catalog.itemDefinitionsById[right.itemDefinitionId]?.baseValue ?? 0) -
+        (catalog.itemDefinitionsById[left.itemDefinitionId]?.baseValue ?? 0)
+      )),
+  }
 }
+
+export const calculatePerfectExtraction = (
+  inventory: InventoryState,
+  catalog: CatalogIndex,
+  solver: LegacyHighs,
+): number => calculatePerfectExtractionResult(inventory, catalog, solver).maximumPotentialScore

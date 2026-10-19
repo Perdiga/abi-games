@@ -2,6 +2,8 @@ import './App.css'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 
 import { EquipmentScreen } from './components/equipment-screen/EquipmentScreen'
+import { abiAssetById } from './data/abi-assets.generated'
+import { collectSecuredScorableItemIds } from './engine'
 import { usePerfectExtraction } from './state/usePerfectExtraction'
 import {
   beginTrainingRun,
@@ -40,11 +42,27 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
   const [state, dispatch] = useReducer(trainingModeReducer, createTrainingModeStore())
   const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false)
   const [skipRulesNextTime, setSkipRulesNextTime] = useState(false)
+  const [isPerfectExtractionOpen, setPerfectExtractionOpen] = useState(false)
   usePerfectExtraction(state, dispatch)
   const status = useMemo(() => selectTrainingStatus(state), [state])
   const timer = useMemo(() => selectTrainingTimer(state), [state])
   const results = useMemo(() => selectTrainingResults(state), [state])
   const perfectExtractionStatus = state.run.perfectExtraction?.status
+  const perfectExtractionItems = state.run.perfectExtraction?.items ?? []
+  const extractedItemCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const itemId of collectSecuredScorableItemIds(state.run.inventory, state.catalog)) {
+      const itemDefinitionId = state.run.inventory.itemInstances[itemId]?.itemDefinitionId
+      if (itemDefinitionId) counts.set(itemDefinitionId, (counts.get(itemDefinitionId) ?? 0) + 1)
+    }
+    return counts
+  }, [state.catalog, state.run.inventory])
+  const extraExtractedItems = useMemo(
+    () => [...extractedItemCounts.entries()]
+      .filter(([itemDefinitionId]) => !perfectExtractionItems.some((item) => item.itemDefinitionId === itemDefinitionId))
+      .map(([itemDefinitionId, count]) => ({ itemDefinitionId, count })),
+    [extractedItemCounts, perfectExtractionItems],
+  )
 
   useEffect(() => {
     if (!status.isInteractive) {
@@ -64,6 +82,7 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
       : 0
 
   const beginRun = () => {
+    setPerfectExtractionOpen(false)
     dispatch(beginTrainingRun(startSeed))
   }
 
@@ -136,6 +155,15 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
           </dl>
 
           <footer className="app-results-screen__footer">
+            {perfectExtractionStatus === 'ready' && (
+              <button
+                className="app-card__action"
+                onClick={() => setPerfectExtractionOpen(true)}
+                type="button"
+              >
+                View perfect extraction
+              </button>
+            )}
             <button className="app-card__action" onClick={requestRunStart} type="button">
               Start another run
             </button>
@@ -223,6 +251,75 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
             </article>
           </div>
         </section>
+      )}
+      {isPerfectExtractionOpen && perfectExtractionStatus === 'ready' && (
+        <div className="app-rules-modal" role="presentation">
+          <section
+            aria-labelledby="perfect-extraction-title"
+            aria-modal="true"
+            className="app-perfect-extraction"
+            data-testid="perfect-extraction-preview"
+            role="dialog"
+          >
+            <header className="app-perfect-extraction__header">
+              <div>
+                <p className="app-card__kicker">Extraction plan / Read only</p>
+                <h2 id="perfect-extraction-title">Perfect extraction</h2>
+              </div>
+              <p>${results?.maximumPotentialScore.toLocaleString()} total value</p>
+            </header>
+            <div className="app-perfect-extraction__content">
+              <p>Green shows the items you selected correctly. Red shows missed or unnecessary items. This view cannot be edited.</p>
+              {perfectExtractionItems.length > 0 ? (
+                <ul className="app-perfect-extraction__items">
+                  {perfectExtractionItems.map(({ itemDefinitionId, count }) => {
+                    const item = state.catalog.itemDefinitionsById[itemDefinitionId]
+                    if (!item) return null
+                    const extractedCount = extractedItemCounts.get(itemDefinitionId) ?? 0
+                    const correctCount = Math.min(count, extractedCount)
+                    const missingCount = count - correctCount
+                    const assetId = itemDefinitionId.startsWith('abi-') ? itemDefinitionId.slice(4) : itemDefinitionId
+                    const imageSrc = abiAssetById[assetId]?.assetPath
+                    return (
+                      <li className={missingCount > 0 ? 'app-perfect-extraction__item--missed' : 'app-perfect-extraction__item--correct'} key={itemDefinitionId}>
+                        {imageSrc ? <img alt="" src={imageSrc} /> : <span aria-hidden="true">◆</span>}
+                        <span>{item.name}</span>
+                        <strong>×{count}</strong>
+                        <em>${(item.baseValue * count).toLocaleString()}</em>
+                        <div className="app-perfect-extraction__comparison">
+                          {correctCount > 0 && <b>Correct ×{correctCount}</b>}
+                          {missingCount > 0 && <i>Missed ×{missingCount}</i>}
+                        </div>
+                      </li>
+                    )
+                  })}
+                  {extraExtractedItems.map(({ itemDefinitionId, count }) => {
+                    const item = state.catalog.itemDefinitionsById[itemDefinitionId]
+                    if (!item) return null
+                    const assetId = itemDefinitionId.startsWith('abi-') ? itemDefinitionId.slice(4) : itemDefinitionId
+                    const imageSrc = abiAssetById[assetId]?.assetPath
+                    return (
+                      <li className="app-perfect-extraction__item--extra" key={`extra-${itemDefinitionId}`}>
+                        {imageSrc ? <img alt="" src={imageSrc} /> : <span aria-hidden="true">◆</span>}
+                        <span>{item.name}</span>
+                        <strong>×{count}</strong>
+                        <em>${(item.baseValue * count).toLocaleString()}</em>
+                        <div className="app-perfect-extraction__comparison"><i>Not recommended ×{count}</i></div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="app-perfect-extraction__empty">No loot can be secured in this run.</p>
+              )}
+            </div>
+            <footer className="app-perfect-extraction__footer">
+              <button autoFocus className="app-card__action" onClick={() => setPerfectExtractionOpen(false)} type="button">
+                Back to results
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
       {isRulesDialogOpen && (
         <div className="app-rules-modal" role="presentation">
