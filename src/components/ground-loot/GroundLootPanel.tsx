@@ -145,7 +145,15 @@ export function GroundLootPanel(props: GroundLootPanelProps) {
                   type="button"
                 >
                   <span className="ground-loot-panel__item-art" aria-hidden="true">
-                    {getItemImageSrc(item) ? <img alt="" src={getItemImageSrc(item) ?? undefined} /> : getItemGlyph(item)}
+                    {getItemImageSrc(item) ? (
+                      <img
+                        alt=""
+                        src={getItemImageSrc(item) ?? undefined}
+                        style={item.rotation === 90 ? { transform: 'rotate(90deg)' } : undefined}
+                      />
+                    ) : (
+                      getItemGlyph(item)
+                    )}
                   </span>
                 </button>
 
