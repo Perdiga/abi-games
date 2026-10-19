@@ -332,7 +332,8 @@ function App({ startSeed, tickIntervalMs = 1000 }: AppProps) {
               <p>Organize o loot dos bots no seu equipamento e extraia antes que o tempo termine.</p>
               <ul>
                 <li>Você tem 5 minutos; novos drops aparecem conforme os bots são eliminados.</li>
-                <li>5 bots serão elimidados nos primeiros 30 segundos.</li>
+                <li>5 bots serão eliminados a cada 10 segundos, do segundo 0 ao 40.</li>
+                <li>Não há perda de pontos durante o primeiro minuto.</li>
                 <li>Itens só podem ser colocados em espaços compatíveis e sem sobreposição.</li>
                 <li>Gire itens compatíveis com <kbd>R</kbd> para encaixá-los melhor.</li>
                 <li>Extraia quando estiver pronto: o valor protegido, menos o tempo gasto, define sua pontuação.</li>

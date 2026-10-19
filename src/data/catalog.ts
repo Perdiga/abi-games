@@ -919,13 +919,13 @@ export const ruleDefinitions: readonly RuleDefinition[] = [
   },
 ] as const
 
-export const TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS = 30
+export const TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS = 60
 
 export const runDefinitions: readonly RunDefinition[] = [
   {
     id: 'training-mode-v1',
     durationSeconds: 300,
-    botDeathSchedule: [0, 10, 15, 20, 25],
+    botDeathSchedule: [0, 10, 20, 30, 40],
     timePenaltyGracePeriodSeconds: TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
     lootGenerationMode: 'randomized_from_pool',
   },

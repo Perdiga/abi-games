@@ -36,7 +36,7 @@ describe('perfect extraction results', () => {
   it('starts optimization after the last bot dies and displays only the proven optimum', () => {
     render(<App startSeed={7} />)
     start()
-    act(() => vi.advanceTimersByTime(24000))
+    act(() => vi.advanceTimersByTime(39000))
     expect(TestWorker.instances).toHaveLength(0)
     act(() => vi.advanceTimersByTime(1000))
     expect(TestWorker.instances).toHaveLength(1)
