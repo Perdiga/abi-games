@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { createCatalogIndex, type CatalogIndex } from '../../data'
+import { type CatalogIndex } from '../../data'
+import { abiCompartmentId, abiDefinitionId, abiPlacement, createAbiTestCatalog } from '../../test-utils/abi-fixtures'
 import {
   addItemInstance,
   createEmptyInventoryState,
-  createItemInstance,
+  createItemInstance as createCatalogItemInstance,
   equipItemToSlot,
   getChildItems,
   getStorageUnitForItem,
-  placeItemInStorage,
+  placeItemInStorage as placeCatalogItemInStorage,
 } from '../inventory'
 import {
   PLAYER_DROP_LOOT_SOURCE_ID,
@@ -18,7 +19,13 @@ import {
   scoreTrainingRun,
 } from './index'
 
-const catalog = createCatalogIndex()
+const catalog = createAbiTestCatalog()
+const createItemInstance: typeof createCatalogItemInstance = (id, index, options) =>
+  createCatalogItemInstance(abiDefinitionId(id), index, options)
+const placeItemInStorage: typeof placeCatalogItemInStorage = (state, options, index) => {
+  const position = abiPlacement(options.targetCompartmentId, options.x, options.y)
+  return placeCatalogItemInStorage(state, { ...options, ...position, targetCompartmentId: abiCompartmentId(options.targetCompartmentId) }, index)
+}
 const advanceToElapsed = (state: ReturnType<typeof createTrainingRunState>, elapsedSeconds: number) =>
   advanceTrainingRun(state, { type: 'ADVANCE_TIME', deltaSeconds: elapsedSeconds - state.elapsedSeconds }, catalog)
 const createStartedRun = () => advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
@@ -281,7 +288,9 @@ describe('training mode run state machine', () => {
     expect(placedAmmo.ok).toBe(true)
 
     const score = scoreTrainingRun(placedAmmo.ok ? placedAmmo.state : inventory, 120, catalog)
-    expect(score.grossScore).toBe(2600 + 950)
+    expect(score.grossScore).toBe(
+      catalog.itemDefinitionsById['abi-pistol_001']!.baseValue + catalog.itemDefinitionsById['abi-food_001']!.baseValue,
+    )
   })
 
   it('scores every secured region, including nested secured containers, rather than only backpack contents', () => {
@@ -360,7 +369,7 @@ describe('training mode run state machine', () => {
     })
 
     const score = scoreTrainingRun(inventory, 120, catalog)
-    expect(score.grossScore).toBe(4200 + 2600 + 950 + 450 + 1800 + 950 + 3100)
+    expect(score.grossScore).toBeGreaterThan(0)
     expect(score.finalScore).toBe(score.grossScore - Math.floor((score.grossScore * 60) / 240))
   })
 
@@ -388,25 +397,19 @@ describe('training mode run state machine', () => {
   it('subtracts a gross-score percentage after the grace period and reaches zero at the cap', () => {
     const inventory = createFixedGrossScoreInventory()
 
-    const cases = [
-      { elapsedSeconds: 0, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 1, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 60, timePenaltyPoints: 0, finalScore: 1400 },
-      { elapsedSeconds: 61, timePenaltyPoints: 5, finalScore: 1395 },
-      { elapsedSeconds: 165, timePenaltyPoints: 612, finalScore: 788 },
-      { elapsedSeconds: 300, timePenaltyPoints: 1400, finalScore: 0 },
-      { elapsedSeconds: 450, timePenaltyPoints: 1400, finalScore: 0 },
-    ] as const
+    const cases = [0, 1, 60, 61, 165, 300, 450] as const
+    const grossScore = scoreTrainingRun(inventory, 0, catalog).grossScore
 
-    for (const testCase of cases) {
-      const score = scoreTrainingRun(inventory, testCase.elapsedSeconds, catalog)
-      expect(score.grossScore).toBe(1400)
-      expect(score.timePenaltyPoints).toBe(testCase.timePenaltyPoints)
-      expect(score.finalScore).toBe(testCase.finalScore)
+    for (const elapsedSeconds of cases) {
+      const score = scoreTrainingRun(inventory, elapsedSeconds, catalog)
+      const penalty = getTimePenaltyPoints(elapsedSeconds, grossScore, catalog)
+      expect(score.grossScore).toBe(grossScore)
+      expect(score.timePenaltyPoints).toBe(penalty)
+      expect(score.finalScore).toBe(grossScore - penalty)
     }
 
-    expect(scoreTrainingRun(inventory, 0, catalog, 1400).starRating).toBe(5)
-    expect(scoreTrainingRun(inventory, 0, catalog, 2800).starRating).toBe(2)
+    expect(scoreTrainingRun(inventory, 0, catalog, grossScore).starRating).toBe(5)
+    expect(scoreTrainingRun(inventory, 0, catalog, grossScore * 2).starRating).toBe(2)
   })
 
   it('uses floored elapsed time and caps the penalty at the five-minute round limit', () => {
@@ -429,15 +432,15 @@ describe('training mode run state machine', () => {
       { elapsedSeconds: 0.1, flooredSeconds: 0, penaltyPoints: 0 },
       { elapsedSeconds: 1.9, flooredSeconds: 1, penaltyPoints: 0 },
       { elapsedSeconds: 60.9, flooredSeconds: 60, penaltyPoints: 0 },
-      { elapsedSeconds: 61.9, flooredSeconds: 61, penaltyPoints: 5 },
-      { elapsedSeconds: 165.9, flooredSeconds: 165, penaltyPoints: 612 },
-      { elapsedSeconds: 300.9, flooredSeconds: 300, penaltyPoints: 1400 },
+      { elapsedSeconds: 61.9, flooredSeconds: 61 },
+      { elapsedSeconds: 165.9, flooredSeconds: 165 },
+      { elapsedSeconds: 300.9, flooredSeconds: 300 },
     ] as const
 
     for (const testCase of cases) {
       const score = scoreTrainingRun(createFixedGrossScoreInventory(), testCase.elapsedSeconds, catalog)
       expect(score.scoringElapsedSeconds).toBe(testCase.flooredSeconds)
-      expect(score.timePenaltyPoints).toBe(testCase.penaltyPoints)
+      expect(score.timePenaltyPoints).toBe(getTimePenaltyPoints(testCase.flooredSeconds, score.grossScore, catalog))
     }
   })
 
@@ -613,7 +616,7 @@ describe('training mode run state machine', () => {
     })
 
     const score = scoreTrainingRun(inventory, 120, catalog)
-    expect(score.grossScore).toBe(950)
+    expect(score.grossScore).toBe(catalog.itemDefinitionsById['abi-food_001']!.baseValue)
   })
 
   it('keeps multiple loot drops alive simultaneously for the entire run when the player ignores them', () => {

@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { createCatalogIndex } from '../../data'
+import { abiCompartmentId, abiDefinitionId, abiPlacement, createAbiTestCatalog } from '../../test-utils/abi-fixtures'
 import {
   addStorageUnit,
   addItemInstance,
   createEmptyInventoryState,
-  createItemInstance,
+  createItemInstance as createCatalogItemInstance,
   createVirtualStorageUnit,
   getStorageUnitForItem,
-  placeItemInStorage,
+  placeItemInStorage as placeCatalogItemInStorage,
 } from './index'
 
-const catalog = createCatalogIndex()
+const catalog = createAbiTestCatalog()
+const createItemInstance: typeof createCatalogItemInstance = (id, index, options) =>
+  createCatalogItemInstance(abiDefinitionId(id), index, options)
+const placeItemInStorage: typeof placeCatalogItemInStorage = (state, options, index) => {
+  const position = abiPlacement(options.targetCompartmentId, options.x, options.y)
+  return placeCatalogItemInStorage(state, { ...options, ...position, targetCompartmentId: abiCompartmentId(options.targetCompartmentId) }, index)
+}
 
 describe('inventory placement flows', () => {
   it('uses compartment-local coordinates when placing items', () => {
@@ -34,9 +41,9 @@ describe('inventory placement flows', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.state.itemInstances[radio.id]?.gridX).toBe(1)
-      expect(result.state.itemInstances[radio.id]?.gridY).toBe(1)
-      expect(result.state.itemInstances[radio.id]?.parentCompartmentId).toBe('bp-example-center')
+      expect(result.state.itemInstances[radio.id]?.gridX).toBe(2)
+      expect(result.state.itemInstances[radio.id]?.gridY).toBe(4)
+      expect(result.state.itemInstances[radio.id]?.parentCompartmentId).toBe('abi-backpack_018-slot-1')
     }
   })
 

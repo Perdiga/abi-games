@@ -69,13 +69,13 @@ describe('perfect extraction results', () => {
     extract()
     const worker = TestWorker.instances[0]!
     act(() => worker.onmessage?.(new MessageEvent('message', {
-      data: { maximumPotentialScore: 100000, items: [{ itemDefinitionId: 'backpack-split', count: 1 }] },
+      data: { maximumPotentialScore: 100000, items: [{ itemDefinitionId: 'abi-backpack_018', count: 1 }] },
     })))
 
     fireEvent.click(screen.getByRole('button', { name: /view perfect extraction/i }))
     expect(screen.getByTestId('perfect-extraction-preview')).toBeInTheDocument()
     expect(screen.getByText(/green shows the items you selected correctly/i)).toBeInTheDocument()
-    expect(screen.getByText('Placeholder Split Backpack')).toBeInTheDocument()
+    expect(screen.getByText('Mochila de CAmpo 926')).toBeInTheDocument()
     expect(screen.getByText('×1')).toBeInTheDocument()
     expect(screen.getByText('Missed ×1')).toBeInTheDocument()
 

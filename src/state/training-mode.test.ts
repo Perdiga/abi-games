@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createCatalogIndex } from '../data'
-import { addItemInstance, createItemInstance, equipItemToSlot } from '../engine/inventory'
+import { abiDefinitionId, createAbiTestCatalog } from '../test-utils/abi-fixtures'
+import { addItemInstance, createItemInstance as createCatalogItemInstance, equipItemToSlot } from '../engine/inventory'
 import {
   beginTrainingRun,
   createTrainingModeStore,
@@ -18,7 +18,9 @@ import {
   validateMoveTrainingItem,
 } from './training-mode'
 
-const catalog = createCatalogIndex()
+const catalog = createAbiTestCatalog()
+const createItemInstance: typeof createCatalogItemInstance = (id, index, options) =>
+  createCatalogItemInstance(abiDefinitionId(id), index, options)
 
 describe('training mode store validators', () => {
   it('updates the extraction reference and stars when optimization finishes after the results screen opens', () => {
