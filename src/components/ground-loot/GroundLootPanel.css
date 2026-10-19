@@ -90,7 +90,7 @@
 }
 
 .ground-loot-panel__grid {
-  --ground-loot-tile-size: 58px;
+  --ground-loot-tile-size: 50px;
   flex: 0 1 auto;
   min-height: 0;
   max-height: calc((var(--ground-loot-tile-size) * 3) + 4px);
@@ -303,7 +303,7 @@
   }
 
   .ground-loot-panel__grid {
-    --ground-loot-tile-size: 58px;
+    --ground-loot-tile-size: 50px;
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
@@ -321,6 +321,6 @@
 
 @media (max-width: 1340px) {
   .ground-loot-panel__grid {
-    --ground-loot-tile-size: min(48px, calc((100cqw - 9px) / 8));
+    --ground-loot-tile-size: 50px;
   }
 }
