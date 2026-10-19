@@ -31,6 +31,7 @@ export type {
   ItemInstance,
   ItemStateDefinition,
   LootSource,
+  PerfectExtractionItem,
   Rotation,
   RuleDefinition,
   RuleViolation,

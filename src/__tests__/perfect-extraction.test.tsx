@@ -63,6 +63,26 @@ describe('perfect extraction results', () => {
     expect(screen.queryByText(/% of possible value/)).not.toBeInTheDocument()
   })
 
+  it('opens the calculated perfect extraction as a read-only item list', () => {
+    render(<App startSeed={7} />)
+    start()
+    extract()
+    const worker = TestWorker.instances[0]!
+    act(() => worker.onmessage?.(new MessageEvent('message', {
+      data: { maximumPotentialScore: 100000, items: [{ itemDefinitionId: 'backpack-split', count: 1 }] },
+    })))
+
+    fireEvent.click(screen.getByRole('button', { name: /view perfect extraction/i }))
+    expect(screen.getByTestId('perfect-extraction-preview')).toBeInTheDocument()
+    expect(screen.getByText(/green shows the items you selected correctly/i)).toBeInTheDocument()
+    expect(screen.getByText('Placeholder Split Backpack')).toBeInTheDocument()
+    expect(screen.getByText('×1')).toBeInTheDocument()
+    expect(screen.getByText('Missed ×1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /back to results/i }))
+    expect(screen.queryByTestId('perfect-extraction-preview')).not.toBeInTheDocument()
+  })
+
   it('terminates the previous worker and rejects its late response after restarting', () => {
     render(<App startSeed={7} />)
     start()

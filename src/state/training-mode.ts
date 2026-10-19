@@ -10,6 +10,7 @@ import {
   type ItemInstance,
   type ItemStateDefinition,
   type LootSource,
+  type PerfectExtractionItem,
   type Rotation,
   type RuleViolation,
   type ScoreBreakdown,
@@ -72,7 +73,7 @@ export type TrainingModeActionValidation =
 
 export type TrainingModeAction =
   | { type: 'BEGIN_RUN'; seed?: number }
-  | { type: 'RESOLVE_PERFECT_EXTRACTION'; inventory: TrainingRunState['inventory']; maximumPotentialScore?: number }
+  | { type: 'RESOLVE_PERFECT_EXTRACTION'; inventory: TrainingRunState['inventory']; maximumPotentialScore?: number; items?: readonly PerfectExtractionItem[] }
   | { type: 'TICK'; deltaSeconds: number; queuedAction?: TrainingRunPlayerAction }
   | {
       type: 'MOVE_ITEM'
@@ -241,7 +242,7 @@ export const applyTrainingModeAction = (
         run: {
           ...state.run,
           maximumPotentialScore,
-          perfectExtraction: { ...perfectExtraction, status: 'ready' },
+          perfectExtraction: { ...perfectExtraction, status: 'ready', items: action.items ?? [] },
           score: state.run.score
             ? scoreTrainingRun(state.run.inventory, state.run.elapsedSeconds, catalog, maximumPotentialScore)
             : undefined,
@@ -268,9 +269,7 @@ export const applyTrainingModeAction = (
         ),
       )
     case 'EQUIP_ITEM':
-      return reduceInventoryOperation(state, catalog, () =>
-        equipItemToSlot(state.run.inventory, action.itemInstanceId, action.targetSlotId, catalog),
-      )
+      return equipItemReducer(state, action.itemInstanceId, action.targetSlotId, catalog)
     case 'UNEQUIP_ITEM':
       return reduceInventoryOperation(state, catalog, () =>
         placeItemInStorage(
@@ -404,7 +403,12 @@ export const validateEquipTrainingItem = (
   catalog = state.catalog,
 ): TrainingModeActionValidation =>
   validateInteractiveInventoryOperation(state, () =>
-    equipItemToSlot(state.run.inventory, action.itemInstanceId, action.targetSlotId, catalog),
+    equipItemToSlot(
+      prepareEquipmentReplacement(state.run, action.itemInstanceId, action.targetSlotId).inventory,
+      action.itemInstanceId,
+      action.targetSlotId,
+      catalog,
+    ),
   )
 
 export const validateUnequipTrainingItem = (
@@ -675,6 +679,48 @@ const dropItemToGroundReducer = (
       ...dropItemToGround(state.run, itemInstanceId, state.run.elapsedSeconds),
       activePhase: 'PlayerLooting',
       phaseHistory: pushPhase(state.run.phaseHistory, 'RunActive:PlayerLooting'),
+    },
+    lastError: undefined,
+    lastViolations: undefined,
+  }
+}
+
+const prepareEquipmentReplacement = (
+  run: TrainingRunState,
+  itemInstanceId: string,
+  targetSlotId: EquipmentSlotId,
+): TrainingRunState => {
+  const currentOccupantId = run.inventory.equipment[targetSlotId]
+  if (!currentOccupantId || currentOccupantId === itemInstanceId) return run
+
+  // A face shield is attached to its helmet, so drop it before replacing that helmet.
+  const withFaceShieldDropped = targetSlotId === 'helmet' && run.inventory.equipment.helmetFaceShield
+    ? dropItemToGround(run, run.inventory.equipment.helmetFaceShield, run.elapsedSeconds)
+    : run
+  return dropItemToGround(withFaceShieldDropped, currentOccupantId, run.elapsedSeconds)
+}
+
+const equipItemReducer = (
+  state: TrainingModeStoreState,
+  itemInstanceId: string,
+  targetSlotId: EquipmentSlotId,
+  catalog: CatalogIndex,
+): TrainingModeStoreState => {
+  if (!isTrainingInteractionActive(state)) {
+    return withFailure(state, catalog, fail(inventoryActionUnavailableMessage))
+  }
+
+  const replacementReadyRun = prepareEquipmentReplacement(state.run, itemInstanceId, targetSlotId)
+  const result = equipItemToSlot(replacementReadyRun.inventory, itemInstanceId, targetSlotId, catalog)
+  if (!result.ok) return withFailure(state, catalog, result)
+
+  return {
+    catalog,
+    run: {
+      ...replacementReadyRun,
+      inventory: result.state,
+      activePhase: 'PlayerLooting',
+      phaseHistory: pushPhase(replacementReadyRun.phaseHistory, 'RunActive:PlayerLooting'),
     },
     lastError: undefined,
     lastViolations: undefined,

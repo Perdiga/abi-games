@@ -5,6 +5,7 @@ import {
   beginTrainingRun,
   createTrainingModeStore,
   dropTrainingItemToGround,
+  equipTrainingItem,
   extractTrainingRunNow,
   moveTrainingItem,
   selectCurrentSecuredValue,
@@ -67,6 +68,21 @@ describe('training mode store validators', () => {
       finalScore: 0,
       starRating: 0,
     })
+  })
+
+  it('replaces an occupied equipment slot and moves its previous item to ground loot', () => {
+    let state = trainingModeReducer(createTrainingModeStore(catalog), beginTrainingRun(7))
+    const firstPistol = createItemInstance('weapon-pistol-service', catalog, { id: 'first-pistol', ownerEntityId: 'player' })
+    const secondPistol = createItemInstance('weapon-pistol-service', catalog, { id: 'second-pistol', ownerEntityId: 'player' })
+    const inventory = addItemInstance(addItemInstance(state.run.inventory, firstPistol, catalog), secondPistol, catalog)
+    state = { ...state, run: { ...state.run, inventory } }
+
+    state = trainingModeReducer(state, equipTrainingItem(firstPistol.id, 'pistol'))
+    state = trainingModeReducer(state, equipTrainingItem(secondPistol.id, 'pistol'))
+
+    expect(state.run.inventory.equipment.pistol).toBe(secondPistol.id)
+    expect(state.run.lootSources.find((source) => source.id === 'loot-source-player-drop')?.itemIds).toContain(firstPistol.id)
+    expect(state.run.inventory.itemInstances[firstPistol.id]?.ownerEntityId).toBe('loot-source-player-drop')
   })
 
   it('marks the run inactive and rejects inventory validation after extraction', () => {
