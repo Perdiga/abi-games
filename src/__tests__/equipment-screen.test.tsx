@@ -111,10 +111,10 @@ describe('equipment screen shell', () => {
     expect(screen.getByTestId('slot-target-backpack')).toHaveClass('equipment-screen__slot--valid')
   })
 
-  it('equips generated loot in a valid destination', () => {
+  it('moves selected ground loot to its first valid destination with F', () => {
     vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     fireEvent.click(screen.getByTestId('item-bot-1-backpack'))
-    fireEvent.click(screen.getByTestId('slot-target-backpack'))
+    fireEvent.keyDown(window, { key: 'f' })
     expect(screen.queryByTestId('item-bot-1-backpack')).not.toBeInTheDocument()
     expect(screen.getByTestId('slot-item-backpack')).toBeInTheDocument()
     expect(screen.getByRole('grid', { name: /backpack/i })).toBeInTheDocument()

@@ -8,6 +8,7 @@ import {
   type InventoryState,
   type ItemDefinition,
   type ItemInstance,
+  type ItemStateDefinition,
   type Rotation,
   type StorageUnit,
 } from '../../data'
@@ -23,6 +24,10 @@ const fail = (reason: string, violations?: InventoryOperationFailure['violations
   reason,
   violations,
 })
+
+export const canRotateItem = (definition: ItemDefinition, itemState: ItemStateDefinition): boolean =>
+  definition.allowRotation ||
+  (definition.category === 'backpack' && itemState.tags.includes('state-collapsed'))
 
 export const createEmptyInventoryState = (catalog: CatalogIndex = defaultCatalog): InventoryState => ({
   itemInstances: {},
@@ -367,7 +372,7 @@ const applyMove = (
     return fail('Only 0° and 90° rotations are supported in v1.')
   }
 
-  if (!definition.allowRotation && action.rotation !== 0) {
+  if (!canRotateItem(definition, itemState) && action.rotation !== 0) {
     return fail(`Item "${definition.name}" cannot be rotated.`)
   }
 

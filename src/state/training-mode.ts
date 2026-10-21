@@ -20,6 +20,7 @@ import {
 } from '../data'
 import {
   advanceTrainingRun,
+  canRotateItem,
   changeItemState,
   cloneInventoryState,
   createTrainingRunState,
@@ -401,15 +402,19 @@ export const validateEquipTrainingItem = (
   state: TrainingModeStoreState,
   action: Extract<TrainingModeAction, { type: 'EQUIP_ITEM' }>,
   catalog = state.catalog,
-): TrainingModeActionValidation =>
-  validateInteractiveInventoryOperation(state, () =>
+): TrainingModeActionValidation => {
+  const backpackReadyRun = prepareBackpackForEquip(state.run, action.itemInstanceId, action.targetSlotId, catalog)
+  if ('ok' in backpackReadyRun) return backpackReadyRun
+
+  return validateInteractiveInventoryOperation(state, () =>
     equipItemToSlot(
-      prepareEquipmentReplacement(state.run, action.itemInstanceId, action.targetSlotId).inventory,
+      prepareEquipmentReplacement(backpackReadyRun, action.itemInstanceId, action.targetSlotId).inventory,
       action.itemInstanceId,
       action.targetSlotId,
       catalog,
     ),
   )
+}
 
 export const validateUnequipTrainingItem = (
   state: TrainingModeStoreState,
@@ -700,6 +705,27 @@ const prepareEquipmentReplacement = (
   return dropItemToGround(withFaceShieldDropped, currentOccupantId, run.elapsedSeconds)
 }
 
+const prepareBackpackForEquip = (
+  run: TrainingRunState,
+  itemInstanceId: string,
+  targetSlotId: EquipmentSlotId,
+  catalog: CatalogIndex,
+): TrainingRunState | InventoryOperationFailure => {
+  if (targetSlotId !== 'backpack') return run
+
+  const item = run.inventory.itemInstances[itemInstanceId]
+  const itemState = item && catalog.itemStatesById[item.stateId]
+  if (!item || !itemState?.tags.includes('state-collapsed')) return run
+
+  const openState = catalog.itemStates.find(
+    (candidate) => candidate.itemDefinitionId === item.itemDefinitionId && candidate.tags.includes('state-open'),
+  )
+  if (!openState) return run
+
+  const opened = changeItemState(run.inventory, itemInstanceId, openState.id, catalog)
+  return opened.ok ? { ...run, inventory: opened.state } : opened
+}
+
 const equipItemReducer = (
   state: TrainingModeStoreState,
   itemInstanceId: string,
@@ -710,7 +736,10 @@ const equipItemReducer = (
     return withFailure(state, catalog, fail(inventoryActionUnavailableMessage))
   }
 
-  const replacementReadyRun = prepareEquipmentReplacement(state.run, itemInstanceId, targetSlotId)
+  const backpackReadyRun = prepareBackpackForEquip(state.run, itemInstanceId, targetSlotId, catalog)
+  if ('ok' in backpackReadyRun) return withFailure(state, catalog, backpackReadyRun)
+
+  const replacementReadyRun = prepareEquipmentReplacement(backpackReadyRun, itemInstanceId, targetSlotId)
   const result = equipItemToSlot(replacementReadyRun.inventory, itemInstanceId, targetSlotId, catalog)
   if (!result.ok) return withFailure(state, catalog, result)
 
@@ -778,7 +807,8 @@ const setItemRotationInInventory = (
   }
 
   const definition = catalog.itemDefinitionsById[item.itemDefinitionId]
-  if (!definition) {
+  const itemState = catalog.itemStatesById[item.stateId]
+  if (!definition || !itemState) {
     return fail(`Unknown item definition "${item.itemDefinitionId}".`)
   }
 
@@ -786,7 +816,7 @@ const setItemRotationInInventory = (
     return fail('Only 0° and 90° rotations are supported in v1.')
   }
 
-  if (!definition.allowRotation && rotation !== 0) {
+  if (!canRotateItem(definition, itemState) && rotation !== 0) {
     return fail(`Item "${definition.name}" cannot be rotated.`)
   }
 
@@ -955,7 +985,7 @@ const buildItemView = (
     boundingWidth: itemState.boundingWidth,
     boundingHeight: itemState.boundingHeight,
     rotation: item.rotation,
-    allowRotation: definition.allowRotation,
+    allowRotation: canRotateItem(definition, itemState),
     allowedEquipmentSlots: definition.allowedEquipmentSlots,
     ownerEntityId: item.ownerEntityId,
     currentDurability: item.currentDurability,
