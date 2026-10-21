@@ -20,6 +20,7 @@ import {
 } from '../data'
 import {
   advanceTrainingRun,
+  canRotateItem,
   changeItemState,
   cloneInventoryState,
   createTrainingRunState,
@@ -778,7 +779,8 @@ const setItemRotationInInventory = (
   }
 
   const definition = catalog.itemDefinitionsById[item.itemDefinitionId]
-  if (!definition) {
+  const itemState = catalog.itemStatesById[item.stateId]
+  if (!definition || !itemState) {
     return fail(`Unknown item definition "${item.itemDefinitionId}".`)
   }
 
@@ -786,7 +788,7 @@ const setItemRotationInInventory = (
     return fail('Only 0° and 90° rotations are supported in v1.')
   }
 
-  if (!definition.allowRotation && rotation !== 0) {
+  if (!canRotateItem(definition, itemState) && rotation !== 0) {
     return fail(`Item "${definition.name}" cannot be rotated.`)
   }
 
@@ -955,7 +957,7 @@ const buildItemView = (
     boundingWidth: itemState.boundingWidth,
     boundingHeight: itemState.boundingHeight,
     rotation: item.rotation,
-    allowRotation: definition.allowRotation,
+    allowRotation: canRotateItem(definition, itemState),
     allowedEquipmentSlots: definition.allowedEquipmentSlots,
     ownerEntityId: item.ownerEntityId,
     currentDurability: item.currentDurability,

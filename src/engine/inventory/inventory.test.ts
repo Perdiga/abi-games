@@ -73,6 +73,41 @@ describe('inventory placement flows', () => {
     }
   })
 
+  it('allows a collapsed backpack to be rotated', () => {
+    let state = createEmptyInventoryState(catalog)
+    const backpack = createItemInstance('backpack-split', catalog, {
+      id: 'collapsed-backpack',
+      ownerEntityId: 'player',
+      stateId: 'state-abi-backpack_018-collapsed',
+    })
+    const storageUnit = createVirtualStorageUnit({
+      id: 'test-storage',
+      ownerEntityId: 'player',
+      layoutId: 'layout-abi-backpack_018',
+      label: 'Test storage',
+    })
+    state = addStorageUnit(state, storageUnit, true)
+    state = addItemInstance(state, backpack, catalog)
+
+    const rotated = placeItemInStorage(
+      state,
+      {
+        itemInstanceId: backpack.id,
+        targetStorageUnitId: storageUnit.id,
+        targetCompartmentId: 'abi-backpack_018-slot-1',
+        x: 0,
+        y: 0,
+        rotation: 90,
+      },
+      catalog,
+    )
+
+    expect(rotated.ok).toBe(true)
+    if (rotated.ok) {
+      expect(rotated.state.itemInstances[backpack.id]?.rotation).toBe(90)
+    }
+  })
+
   it('rejects a rotated placement for non-rotatable items even when rotation would make the fit possible', () => {
     const customCatalog = createCatalogIndex()
     customCatalog.layoutsById['layout-test-rotation-only'] = {
