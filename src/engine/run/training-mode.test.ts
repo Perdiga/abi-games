@@ -454,7 +454,7 @@ describe('training mode run state machine', () => {
     }
   })
 
-  it('drops a bot backpack as an empty lootable unit without fixed placements', () => {
+  it('drops a bot backpack closed without fixed contents', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
     const afterFirstDrop = advanceToElapsed(started, 5)
     const lootSource = afterFirstDrop.lootSources[0]!
@@ -464,10 +464,10 @@ describe('training mode run state machine', () => {
 
     expect(droppedBackpackId).toBeDefined()
 
-    const droppedBackpackStorage = getStorageUnitForItem(afterFirstDrop.inventory, droppedBackpackId!)
-    const nestedChildren = getChildItems(afterFirstDrop.inventory, droppedBackpackStorage!.id)
+    const droppedBackpack = afterFirstDrop.inventory.itemInstances[droppedBackpackId!]
 
-    expect(nestedChildren).toEqual([])
+    expect(catalog.itemStatesById[droppedBackpack!.stateId]?.tags).toContain('state-collapsed')
+    expect(getStorageUnitForItem(afterFirstDrop.inventory, droppedBackpackId!)).toBeUndefined()
     expect(lootSource.itemIds).toContain(droppedBackpackId!)
   })
 
@@ -654,7 +654,7 @@ describe('training mode run state machine', () => {
     ])
   })
 
-  it('does not seed dropped backpacks with fixed contents', () => {
+  it('drops backpacks closed without a storage unit', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
     const afterFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 5 }, catalog)
     const droppedBackpackId = afterFirstDrop.lootSources[0]?.itemIds.find((itemId) =>
@@ -662,8 +662,8 @@ describe('training mode run state machine', () => {
     )
 
     expect(droppedBackpackId).toBeDefined()
-    const droppedBackpackStorage = getStorageUnitForItem(afterFirstDrop.inventory, droppedBackpackId!)
-    expect(droppedBackpackStorage).toBeDefined()
-    expect(getChildItems(afterFirstDrop.inventory, droppedBackpackStorage!.id)).toEqual([])
+    const droppedBackpack = afterFirstDrop.inventory.itemInstances[droppedBackpackId!]
+    expect(catalog.itemStatesById[droppedBackpack!.stateId]?.tags).toContain('state-collapsed')
+    expect(getStorageUnitForItem(afterFirstDrop.inventory, droppedBackpackId!)).toBeUndefined()
   })
 })

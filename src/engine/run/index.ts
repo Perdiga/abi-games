@@ -16,6 +16,7 @@ import {
 } from '../../data'
 import {
   addItemInstance,
+  changeItemState,
   cloneInventoryState,
   collectSecuredScorableItemIds,
   createEmptyInventoryState,
@@ -245,7 +246,7 @@ const advanceRunTime = (
   }
 
   while (nextState.pendingBotDeaths[0] && nextState.pendingBotDeaths[0]!.atSeconds <= nextElapsed) {
-    nextState = spawnLootDrop(nextState, nextState.pendingBotDeaths[0]!.botId)
+    nextState = spawnLootDrop(nextState, nextState.pendingBotDeaths[0]!.botId, catalog)
   }
 
   if (nextElapsed >= definition.durationSeconds) {
@@ -297,14 +298,14 @@ const finalizeRun = (
   }
 }
 
-const spawnLootDrop = (state: TrainingRunState, botId: string): TrainingRunState => {
+const spawnLootDrop = (state: TrainingRunState, botId: string, catalog: CatalogIndex): TrainingRunState => {
   const rosterEntry = state.botRoster.find((entry) => entry.botId === botId)
 
   if (!rosterEntry || rosterEntry.dropped) {
     return state
   }
 
-  const inventory = cloneInventoryState(state.inventory)
+  let inventory = cloneInventoryState(state.inventory)
   const lootSourceId = `loot-source-${botId}`
   const droppedItemIds: string[] = []
   const spawnedAtSeconds = state.pendingBotDeaths[0]?.atSeconds ?? state.elapsedSeconds
@@ -327,6 +328,19 @@ const spawnLootDrop = (state: TrainingRunState, botId: string): TrainingRunState
       gridY: undefined,
     }
     reassignSubtreeOwners(inventory, itemId, lootSourceId)
+
+    const definition = catalog.itemDefinitionsById[item.itemDefinitionId]
+    const collapsedState = definition?.category === 'backpack'
+      ? catalog.itemStates.find(
+          (itemState) => itemState.itemDefinitionId === definition.id && itemState.tags.includes('state-collapsed'),
+        )
+      : undefined
+    if (collapsedState) {
+      const collapsed = changeItemState(inventory, itemId, collapsedState.id, catalog)
+      if (collapsed.ok) {
+        inventory = collapsed.state
+      }
+    }
   }
 
   const lootSource: LootSource = {
@@ -432,10 +446,22 @@ const seedLoadout = (
 ): { inventory: InventoryState; topLevelItemIds: string[] } => {
   let inventory = startingInventory
   const topLevelItemIds: string[] = []
+  const getSpawnStateId = (definitionId: string): string | undefined => {
+    const definition = catalog.itemDefinitionsById[definitionId]
+    if (definition?.category !== 'backpack') {
+      return undefined
+    }
+
+    return catalog.itemStates.find(
+      (itemState) => itemState.itemDefinitionId === definitionId && itemState.tags.includes('state-open'),
+    )?.id
+  }
+
   for (const [slotId, definitionId] of Object.entries(template.equipment) as Array<[EquipmentSlotId, string]>) {
     const item = createItemInstance(definitionId, catalog, {
       id: `${idPrefix}-${slotId}`,
       ownerEntityId,
+      stateId: getSpawnStateId(definitionId),
     })
     inventory = addItemInstance(inventory, item, catalog)
     topLevelItemIds.push(item.id)
@@ -454,6 +480,7 @@ const seedLoadout = (
     const item = createItemInstance(definitionId, catalog, {
       id: `${idPrefix}-loot-${index}`,
       ownerEntityId,
+      stateId: getSpawnStateId(definitionId),
     })
     inventory = addItemInstance(inventory, item, catalog)
     topLevelItemIds.push(item.id)
