@@ -22,6 +22,7 @@ interface CompartmentGridProps {
   selectedItemId: string | null
   selectedItem: InventoryItemRecord | null
   onItemSelect: (itemId: string) => void
+  onItemDragChange?: (itemId: string | null) => void
   onContainerOpen?: (storageUnitId: string) => void
   onPlaceItem: (target: CellTarget) => void
   getPlacementValidation?: (target: CellTarget) => PlacementValidation | null
@@ -33,6 +34,7 @@ export function CompartmentGrid({
   selectedItemId,
   selectedItem,
   onItemSelect,
+  onItemDragChange,
   onContainerOpen,
   onPlaceItem,
   getPlacementValidation,
@@ -162,7 +164,9 @@ export function CompartmentGrid({
                 event.dataTransfer.effectAllowed = 'move'
                 event.dataTransfer.setData('text/plain', record.itemInstanceId)
                 onItemSelect(record.itemInstanceId)
+                onItemDragChange?.(record.itemInstanceId)
               }}
+              onDragEnd={() => onItemDragChange?.(null)}
               style={
                 {
                   '--item-tint': getItemTint(record),

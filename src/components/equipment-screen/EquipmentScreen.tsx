@@ -24,6 +24,7 @@ import {
   setTrainingItemState,
   type TrainingModeAction,
   type TrainingModeActionValidation,
+  type TrainingModeStorageUnitView,
   type TrainingModeStoreState,
   unequipTrainingItem,
   validateEquipTrainingItem,
@@ -146,6 +147,7 @@ interface SlotGroup {
 
 export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null)
   const [activeStorageUnitId, setActiveStorageUnitId] = useState<string | null>(null)
   const [isFaceShieldDialogOpen, setFaceShieldDialogOpen] = useState(false)
   const faceShieldDialogRef = useRef<HTMLDialogElement>(null)
@@ -272,8 +274,10 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
       event.preventDefault()
       if (key === 'r') {
         handleRotateSelectedItem()
-      } else {
+      } else if (draggedItemId && selectedItem?.category === 'backpack') {
         handleToggleSelectedBackpack()
+      } else {
+        handleMoveSelectedGroundItem()
       }
     }
 
@@ -474,6 +478,61 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     setStatusMessage(`${selectedItem.name} ${currentIsOpen ? 'closed' : 'opened'}.`)
   }
 
+  function handleMoveSelectedGroundItem() {
+    if (!selectedItem || !selectedItem.ownerEntityId.startsWith('loot-source-')) {
+      return
+    }
+
+    const findFirstContainerTarget = (storageUnits: readonly TrainingModeStorageUnitView[]): CellTarget | null => {
+      for (const storageUnit of storageUnits) {
+        for (const compartment of storageUnit.compartments) {
+          for (let y = 0; y < compartment.shapeMask.length; y += 1) {
+            for (let x = 0; x < (compartment.shapeMask[y]?.length ?? 0); x += 1) {
+              if (compartment.shapeMask[y]?.[x] !== '1') continue
+              const target: CellTarget = {
+                kind: 'container',
+                storageUnitId: storageUnit.storageUnitId,
+                compartmentId: compartment.compartmentId,
+                x,
+                y,
+              }
+              if (getValidation(target)?.valid) return target
+            }
+          }
+        }
+      }
+      return null
+    }
+
+    const pocketTarget = pocketsStorageUnit ? findFirstContainerTarget([pocketsStorageUnit]) : null
+    const equipmentTarget = equipmentSlots
+      .filter((slot) => slot.slotId !== 'pockets' && slot.slotId !== 'backpack' && !slot.item)
+      .map((slot) => ({ kind: 'equipment-slot' as const, slotId: slot.slotId }))
+      .find((target) => getValidation(target)?.valid)
+    const backpackSlotTarget = equipmentSlots
+      .filter((slot) => slot.slotId === 'backpack')
+      .map((slot) => ({ kind: 'equipment-slot' as const, slotId: slot.slotId }))
+      .find((target) => getValidation(target)?.valid)
+    const tacticalVestTarget = findFirstContainerTarget(
+      playerStorageTree
+        .filter(({ storageUnit }) => storageUnit.sourceItem?.category === 'vest_tactical')
+        .map(({ storageUnit }) => storageUnit),
+    )
+    const backpackTarget = findFirstContainerTarget(
+      playerStorageTree
+        .filter(({ storageUnit }) => storageUnit.sourceItem?.category === 'backpack')
+        .map(({ storageUnit }) => storageUnit),
+    )
+    const target = pocketTarget ?? equipmentTarget ?? backpackSlotTarget ?? tacticalVestTarget ?? backpackTarget
+
+    if (!target) {
+      setStatusMessage(`No valid destination found for ${selectedItem.name}.`)
+      return
+    }
+
+    handlePlaceItem(target)
+  }
+
   function handleExtractNow() {
     const validation = toPlacementValidation(validateExtractTrainingRunNow(state))
     if (!validation?.valid) {
@@ -582,7 +641,9 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                                 event.dataTransfer.effectAllowed = 'move'
                                 event.dataTransfer.setData('text/plain', slot.item!.itemInstanceId)
                                 handleItemSelect(slot.item!.itemInstanceId)
+                                setDraggedItemId(slot.item!.itemInstanceId)
                               }}
+                              onDragEnd={() => setDraggedItemId(null)}
                               role="button"
                               style={
                                 {
@@ -654,6 +715,7 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                       items={pocketsStorageUnit.compartments.flatMap((compartment) => compartment.items)}
                       equipment-screen__column equipment-screen__panel equipment-screen__silhouette layout={toGridLayout(pocketsStorageUnit)}
                       onItemSelect={handleItemSelect}
+                      onItemDragChange={setDraggedItemId}
                       onContainerOpen={handleContainerOpen}
                       onPlaceItem={handlePlaceItem}
                       selectedItem={selectedItem}
@@ -710,7 +772,9 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                               event.dataTransfer.effectAllowed = 'move'
                               event.dataTransfer.setData('text/plain', slot.item!.itemInstanceId)
                               handleItemSelect(slot.item!.itemInstanceId)
+                              setDraggedItemId(slot.item!.itemInstanceId)
                             }}
+                            onDragEnd={() => setDraggedItemId(null)}
                             role="button"
                             style={{ '--item-tint': getItemTint(slot.item) } as CSSProperties}
                             tabIndex={0}
@@ -810,6 +874,7 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
                       items={storageUnit.compartments.flatMap((compartment) => compartment.items)}
                       layout={toGridLayout(storageUnit)}
                       onItemSelect={handleItemSelect}
+                      onItemDragChange={setDraggedItemId}
                       onContainerOpen={handleContainerOpen}
                       onPlaceItem={handlePlaceItem}
                       selectedItem={selectedItem}
@@ -825,6 +890,7 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
             <GroundLootPanel
               getPlacementValidation={(target) => getValidation(target)}
               onDropToGround={handleDropToGround}
+              onItemDragChange={setDraggedItemId}
               onItemSelect={handleItemSelect}
               onPlaceItem={handlePlaceItem}
               selectedItem={selectedItem}

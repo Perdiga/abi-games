@@ -20,6 +20,7 @@ interface GroundLootPanelProps {
   selectedItemId: string | null
   selectedItem: InventoryItemRecord | null
   onDropToGround: (itemId?: string) => void
+  onItemDragChange?: (itemId: string | null) => void
   onItemSelect: (itemId: string) => void
   onPlaceItem: (target: CellTarget) => void
   getPlacementValidation: (target: CellTarget) => { valid: boolean; reason?: string } | null
@@ -49,7 +50,7 @@ const setTooltipSide = (tile: HTMLDivElement) => {
 }
 
 export function GroundLootPanel(props: GroundLootPanelProps) {
-  const { state, selectedItemId, onDropToGround, onItemSelect } = props
+  const { state, selectedItemId, onDropToGround, onItemDragChange, onItemSelect } = props
   const lootSources = useMemo(() => selectLootSources(state), [state])
 
   const groundLootItems = useMemo(() => {
@@ -140,7 +141,9 @@ export function GroundLootPanel(props: GroundLootPanelProps) {
                     event.dataTransfer.effectAllowed = 'move'
                     event.dataTransfer.setData('text/plain', item.itemInstanceId)
                     onItemSelect(item.itemInstanceId)
+                    onItemDragChange?.(item.itemInstanceId)
                   }}
+                  onDragEnd={() => onItemDragChange?.(null)}
                   style={{ '--item-tint': getItemTint(item) } as CSSProperties}
                   type="button"
                 >
