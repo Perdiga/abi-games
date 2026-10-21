@@ -15,6 +15,7 @@ import {
   selectTrainingStatus,
   trainingModeReducer,
   validateDropTrainingItemToGround,
+  validateEquipTrainingItem,
   validateMoveTrainingItem,
 } from './training-mode'
 
@@ -85,6 +86,28 @@ describe('training mode store validators', () => {
     expect(state.run.inventory.equipment.pistol).toBe(secondPistol.id)
     expect(state.run.lootSources.find((source) => source.id === 'loot-source-player-drop')?.itemIds).toContain(firstPistol.id)
     expect(state.run.inventory.itemInstances[firstPistol.id]?.ownerEntityId).toBe('loot-source-player-drop')
+  })
+
+  it('opens a collapsed backpack and replaces the equipped backpack', () => {
+    let state = trainingModeReducer(createTrainingModeStore(catalog), beginTrainingRun(7))
+    const wornBackpack = createItemInstance('backpack-split', catalog, { id: 'worn-backpack', ownerEntityId: 'player' })
+    const looseBackpack = createItemInstance('backpack-split', catalog, {
+      id: 'loose-backpack',
+      ownerEntityId: 'player',
+      stateId: 'state-abi-backpack_018-collapsed',
+    })
+    const inventory = addItemInstance(addItemInstance(state.run.inventory, wornBackpack, catalog), looseBackpack, catalog)
+    state = { ...state, run: { ...state.run, inventory } }
+    state = trainingModeReducer(state, equipTrainingItem(wornBackpack.id, 'backpack'))
+
+    const validation = validateEquipTrainingItem(state, equipTrainingItem(looseBackpack.id, 'backpack'))
+    expect(validation.ok).toBe(true)
+
+    state = trainingModeReducer(state, equipTrainingItem(looseBackpack.id, 'backpack'))
+    expect(state.run.inventory.equipment.backpack).toBe(looseBackpack.id)
+    expect(catalog.itemStatesById[state.run.inventory.itemInstances[looseBackpack.id]!.stateId]?.tags).toContain('state-open')
+    expect(state.run.inventory.itemInstances[looseBackpack.id]?.ownerEntityId).toBe('player')
+    expect(state.run.lootSources.find((source) => source.id === 'loot-source-player-drop')?.itemIds).toContain(wornBackpack.id)
   })
 
   it('marks the run inactive and rejects inventory validation after extraction', () => {
