@@ -1190,7 +1190,7 @@
 
   .equipment-screen__main {
     --equipment-left-rail-width: 220px;
-    grid-template-columns: 220px 535px 465px;
+    grid-template-columns: 220px 550px 450px;
     justify-content: center;
   }
 }
