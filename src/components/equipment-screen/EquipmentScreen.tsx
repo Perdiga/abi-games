@@ -176,10 +176,18 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     () => playerStorageTree.find(({ storageUnit }) => storageUnit.storageUnitId === activeStorageUnitId)?.storageUnit,
     [activeStorageUnitId, playerStorageTree],
   )
-  const visiblePlayerStorageUnits = useMemo(
-    () => (activeStorageUnit ? [{ storageUnit: activeStorageUnit, depth: 0 }] : playerStorageTree.filter(({ depth }) => depth === 0)),
-    [activeStorageUnit, playerStorageTree],
-  )
+  const visiblePlayerStorageUnits = useMemo(() => {
+    const rootUnits = playerStorageTree.filter(({ depth }) => depth === 0)
+    if (!activeStorageUnit) {
+      return rootUnits
+    }
+    // When a nested backpack is active, keep non-backpack root units (e.g. tactical vest)
+    // visible and replace only the backpack entry with the active storage unit.
+    const nonBackpackRoots = rootUnits.filter(
+      ({ storageUnit }) => storageUnit.sourceItem?.category !== 'backpack',
+    )
+    return [...nonBackpackRoots, { storageUnit: activeStorageUnit, depth: 0 }]
+  }, [activeStorageUnit, playerStorageTree])
   const pocketsStorageUnit = useMemo(
     () => playerStorageUnits.find((storageUnit) => storageUnit.sourceItem?.equippedSlotId === 'pockets'),
     [playerStorageUnits],
