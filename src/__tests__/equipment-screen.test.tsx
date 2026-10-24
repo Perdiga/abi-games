@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { CompartmentGrid } from '../components/grids/CompartmentGrid'
 import type { GridLayout } from '../components/grids/types'
+import { createCatalogIndex } from '../data'
 
 const testLayout: GridLayout = {
   id: 'test-layout', label: 'Test Layout', width: 5, height: 3,
@@ -54,7 +55,12 @@ describe('equipment screen shell', () => {
     act(() => vi.advanceTimersByTime(40000))
 
     const groundItems = screen.getAllByTestId(/^item-/)
-    const helmet = groundItems.find((item) => /helmet|capacete/i.test(item.getAttribute('aria-label') ?? ''))
+    const compatibleHelmetNames = new Set(
+      createCatalogIndex().itemDefinitions
+        .filter((definition) => definition.category === 'helmet' && (definition.shieldsCompatible?.length ?? 0) > 0)
+        .map((definition) => definition.name),
+    )
+    const helmet = groundItems.find((item) => compatibleHelmetNames.has(item.getAttribute('aria-label') ?? ''))
     const faceShield = groundItems.find((item) => /face shield|protetor facial|visor/i.test(item.getAttribute('aria-label') ?? ''))
     expect(helmet).toBeDefined()
     expect(faceShield).toBeDefined()

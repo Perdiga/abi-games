@@ -2,7 +2,6 @@ import {
   createCatalogIndex,
   playerStarterLoadout,
   TRAINING_TIME_PENALTY_GRACE_PERIOD_SECONDS,
-  trainingBotLoadoutPool,
   type BotLoadoutTemplate,
   type BotRosterEntry,
   type CatalogIndex,
@@ -28,7 +27,9 @@ import {
 
 const defaultCatalog = createCatalogIndex()
 const MAX_BOT_DROP_ITEMS = 15
-const MIN_RANDOM_BOT_LOOT_ITEMS = 3
+const MIN_RANDOM_BOT_LOOT_ITEMS = 1
+const MAX_RANDOM_BOT_LOOT_ITEMS = 5
+const FACE_SHIELD_CHANCE = 0.8
 
 const createSeededRng = (seed: number) => {
   let value = seed >>> 0
@@ -182,28 +183,77 @@ const createRandomBotLoadout = (
   rng: () => number,
   botId: string,
 ): BotLoadoutTemplate => {
-  const backpackDefinitionId =
-    trainingBotLoadoutPool[0]?.equipment.backpack ??
-    catalog.itemDefinitions.find((definition) => definition.category === 'backpack')?.id
+  const equipment: Partial<Record<EquipmentSlotId, string>> = {}
   const availableDefinitionIds = catalog.itemDefinitions.map((definition) => definition.id)
   const loot: string[] = []
+  const takeRandom = (definitionIds: readonly string[]) => {
+    const candidates = definitionIds.filter((definitionId) => availableDefinitionIds.includes(definitionId))
+    if (candidates.length === 0) return undefined
 
-  if (backpackDefinitionId) {
-    availableDefinitionIds.splice(availableDefinitionIds.indexOf(backpackDefinitionId), 1)
+    const definitionId = candidates[Math.floor(rng() * candidates.length)]!
+    availableDefinitionIds.splice(availableDefinitionIds.indexOf(definitionId), 1)
+    return definitionId
+  }
+  const definitionIdsFor = (predicate: (definition: CatalogIndex['itemDefinitions'][number]) => boolean) =>
+    catalog.itemDefinitions
+      .map((definition) => catalog.itemDefinitionsById[definition.id] ?? definition)
+      .filter(predicate)
+      .map((definition) => definition.id)
+  const equipRandom = (slotId: EquipmentSlotId, definitionIds: readonly string[]) => {
+    const definitionId = takeRandom(definitionIds)
+    if (definitionId) equipment[slotId] = definitionId
+    return definitionId
   }
 
-  const weaponDefinitionIds = availableDefinitionIds.filter((itemDefinitionId) => {
-    const category = catalog.itemDefinitionsById[itemDefinitionId]?.category
-    return category === 'weapon_primary' || category === 'weapon_secondary' || category === 'weapon_pistol'
-  })
-  if (weaponDefinitionIds.length > 0) {
-    const weaponDefinitionId = weaponDefinitionIds[Math.floor(rng() * weaponDefinitionIds.length)]!
-    availableDefinitionIds.splice(availableDefinitionIds.indexOf(weaponDefinitionId), 1)
-    loot.push(weaponDefinitionId)
+  const weaponDefinitionId = takeRandom(definitionIdsFor((definition) =>
+    definition.category === 'weapon_primary' || definition.category === 'weapon_secondary' || definition.category === 'weapon_pistol',
+  ))
+  if (weaponDefinitionId) {
+    const weaponSlot = catalog.itemDefinitionsById[weaponDefinitionId]!.allowedEquipmentSlots[0]
+    if (weaponSlot) equipment[weaponSlot] = weaponDefinitionId
   }
 
-  const equippedItemCount = backpackDefinitionId ? 1 : 0
-  const maximumLootItems = Math.min(MAX_BOT_DROP_ITEMS - equippedItemCount, availableDefinitionIds.length + loot.length)
+  const helmetDefinitionId = equipRandom('helmet', definitionIdsFor((definition) => definition.category === 'helmet'))
+  const helmetAllowsHeadset = helmetDefinitionId
+    ? !catalog.itemDefinitionsById[helmetDefinitionId]!.tags.includes('blocks-headset')
+    : false
+  if (helmetAllowsHeadset) {
+    equipRandom('headset', definitionIdsFor((definition) => definition.category === 'headset'))
+  }
+  equipRandom('backpack', definitionIdsFor((definition) => definition.category === 'backpack'))
+
+  const ballisticRigDefinitionIds = definitionIdsFor((definition) =>
+    definition.id.includes('ballistic_rig') || definition.tags.includes('ballistic-vest-integrated'),
+  )
+  const chestRigDefinitionIds = definitionIdsFor((definition) =>
+    definition.category === 'vest_tactical' && !ballisticRigDefinitionIds.includes(definition.id),
+  )
+  const ballisticVestDefinitionIds = definitionIdsFor((definition) => definition.category === 'vest_ballistic')
+
+  if (rng() < 0.5 && ballisticRigDefinitionIds.length > 0) {
+    equipRandom('tacticalVest', ballisticRigDefinitionIds)
+  } else {
+    equipRandom('ballisticVest', ballisticVestDefinitionIds)
+    equipRandom('tacticalVest', chestRigDefinitionIds)
+  }
+
+  if (helmetDefinitionId && rng() < FACE_SHIELD_CHANCE) {
+    const helmet = catalog.itemDefinitionsById[helmetDefinitionId]!
+    const compatibleShieldIds = (helmet.shieldsCompatible ?? []).flatMap((shieldId) =>
+      catalog.itemDefinitionsById[shieldId]
+        ? [shieldId]
+        : catalog.itemDefinitionsById[`abi-${shieldId}`]
+          ? [`abi-${shieldId}`]
+          : [],
+    )
+    equipRandom('helmetFaceShield', compatibleShieldIds)
+  }
+
+  const maximumLootItems = Math.min(
+    MAX_RANDOM_BOT_LOOT_ITEMS,
+    MAX_BOT_DROP_ITEMS - Object.keys(equipment).length,
+    availableDefinitionIds.length,
+  )
   const minimumLootItems = Math.min(MIN_RANDOM_BOT_LOOT_ITEMS, maximumLootItems)
   const itemCount = minimumLootItems + Math.floor(rng() * (maximumLootItems - minimumLootItems + 1))
 
@@ -214,7 +264,7 @@ const createRandomBotLoadout = (
 
   return {
     id: `random-${botId}`,
-    equipment: backpackDefinitionId ? { backpack: backpackDefinitionId } : {},
+    equipment,
     loot,
   }
 }
