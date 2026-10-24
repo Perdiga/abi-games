@@ -191,6 +191,22 @@ export const calculatePerfectExtractionResult = (
             .map((entry): Term => [-1, entry.variable]),
         ], '<=', 0)
       }
+    } else if (rule.kind === 'requires-compatible-face-shield') {
+      for (const subject of equipped.filter((entry) => rule.subjectSlots.includes(entry.slotId))) {
+        const shieldId = subject.definition.id.replace(/^abi-/, '')
+        const matchingHosts = equipped.filter((entry) => {
+          if (entry.slotId !== rule.requiredHostSlot) return false
+          const def = entry.definition
+          if (def.shieldsCompatible) {
+            return def.shieldsCompatible.some((id) => id === shieldId || id === subject.definition.id)
+          }
+          return def.tags.includes('supports-face-shield')
+        })
+        constrain([
+          [1, subject.variable],
+          ...matchingHosts.map((entry): Term => [-1, entry.variable]),
+        ], '<=', 0)
+      }
     } else if (rule.kind === 'paired-slot-tag-conflict') {
       for (const subjectSlot of rule.subjectSlots) {
         for (const otherSlot of rule.otherSlots) {

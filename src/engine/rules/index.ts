@@ -49,6 +49,39 @@ const evaluateRule = (
   context: RuleEvaluationContext,
 ): RuleViolation | undefined => {
   switch (rule.kind) {
+    case 'requires-compatible-face-shield': {
+      if (action.type !== 'equip' || !rule.subjectSlots.includes(action.targetSlotId)) {
+        return undefined
+      }
+
+      const host = context.getEquippedItem(rule.requiredHostSlot)
+      const hostDefinition = host ? context.getItemDefinition(host.id) : undefined
+
+      if (!host || !hostDefinition) {
+        return { ruleId: rule.id, message: rule.message }
+      }
+
+      const subject = context.getItem(action.itemInstanceId)
+      const subjectDefinition = subject ? context.getItemDefinition(subject.id) : undefined
+
+      if (!subject || !subjectDefinition) {
+        return undefined
+      }
+
+      if (hostDefinition.shieldsCompatible) {
+        const shieldId = subjectDefinition.id.replace(/^abi-/, '')
+        const isCompatible = hostDefinition.shieldsCompatible.some(
+          (compatibleId) => compatibleId === shieldId || compatibleId === subjectDefinition.id,
+        )
+        if (!isCompatible) {
+          return { ruleId: rule.id, message: rule.message }
+        }
+      } else if (!hostDefinition.tags.includes('supports-face-shield')) {
+        return { ruleId: rule.id, message: rule.message }
+      }
+
+      return undefined
+    }
     case 'requires-equipped-tag': {
       if (action.type !== 'equip' || !rule.subjectSlots.includes(action.targetSlotId)) {
         return undefined

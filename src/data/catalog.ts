@@ -334,7 +334,7 @@ const hasOpenBackpackState = (item: AbiAssetItem): boolean =>
 const externalItemTags = (item: AbiAssetItem, containerLayoutId: string | undefined): readonly string[] => [
   'abi-asset',
   ...(containerLayoutId ? ['holder-shell'] : []),
-  ...(item.type === 'helmet' ? ['supports-face-shield'] : []),
+  ...(item.type === 'helmet' && item.shieldsCompatible && item.shieldsCompatible.length > 0 ? ['supports-face-shield'] : []),
 ]
 
 const externalContainerLayouts: readonly ContainerLayoutDefinition[] = abiAssetItems.flatMap((item) => {
@@ -397,6 +397,7 @@ const externalItemDefinitions: readonly ItemDefinition[] = abiAssetItems.map((it
     tags: externalItemTags(item, containerLayoutId),
     defaultStateId: `state-abi-${item.id}`,
     allowRotation: !containerLayoutId,
+    shieldsCompatible: item.shieldsCompatible ?? undefined,
   }
 })
 
@@ -446,10 +447,9 @@ export const ruleDefinitions: readonly RuleDefinition[] = [
   {
     id: 'rule-face-shield-requires-helmet-support',
     priority: 100,
-    kind: 'requires-equipped-tag',
+    kind: 'requires-compatible-face-shield',
     subjectSlots: ['helmetFaceShield'],
     requiredHostSlot: 'helmet',
-    requiredHostTags: ['supports-face-shield'],
     effect: 'deny',
     message: 'A face shield needs a compatible helmet.',
   },

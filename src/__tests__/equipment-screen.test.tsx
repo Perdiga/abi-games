@@ -42,7 +42,7 @@ describe('equipment screen shell', () => {
   })
 
   it('starts with the player starter loadout and exposes the run HUD', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun()
     expect(screen.getByTestId('secured-value')).toHaveTextContent('$0')
     expect(screen.getByTestId('players-remaining')).toHaveTextContent('4 / 5 players remaining')
     expect(screen.getByTestId('ground-loot-grid')).toBeInTheDocument()
@@ -50,24 +50,31 @@ describe('equipment screen shell', () => {
   })
 
   it('opens face-shield options from a compatible helmet and equips the selected shield', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun()
+    vi.useFakeTimers(); render(<App startSeed={1} tickIntervalMs={1000} />); startRun()
     act(() => vi.advanceTimersByTime(40000))
 
     const groundItems = screen.getAllByTestId(/^item-/)
-    const helmet = groundItems.find((item) => /helmet|capacete/i.test(item.getAttribute('aria-label') ?? ''))
-    const faceShield = groundItems.find((item) => /face shield|protetor facial|visor/i.test(item.getAttribute('aria-label') ?? ''))
-    expect(helmet).toBeDefined()
-    expect(faceShield).toBeDefined()
-    const faceShieldTestId = faceShield!.getAttribute('data-testid')
+    const helmets = groundItems.filter((item) => /helmet|capacete/i.test(item.getAttribute('aria-label') ?? ''))
+    let shieldOption: HTMLElement | undefined
 
-    fireEvent.click(helmet!)
-    fireEvent.click(document.querySelector('[data-slot-id="helmet"]')!)
-    fireEvent.click(screen.getByTestId('slot-item-helmet'))
+    for (const helmet of helmets) {
+      fireEvent.click(helmet)
+      fireEvent.click(document.querySelector('[data-slot-id="helmet"]')!)
+      const equippedHelmet = screen.queryByTestId('slot-item-helmet')
+      if (!equippedHelmet) continue
 
-    const dialog = screen.getByRole('dialog', { name: /equip face shield/i })
-    const shieldOption = within(dialog)
-      .getAllByRole('button')
-      .find((button) => button.classList.contains('equipment-screen__face-shield-option'))
+      fireEvent.click(equippedHelmet)
+      const dialog = screen.queryByRole('dialog', { name: /equip face shield/i })
+      if (!dialog) continue
+
+      shieldOption = within(dialog)
+        .getAllByRole('button')
+        .find((button) => button.classList.contains('equipment-screen__face-shield-option'))
+      if (shieldOption) break
+
+      fireEvent.click(within(dialog).getByRole('button', { name: /close/i }))
+    }
+
     expect(shieldOption).toBeDefined()
 
     const shieldName = shieldOption!.querySelector('strong')?.textContent
@@ -79,11 +86,11 @@ describe('equipment screen shell', () => {
     fireEvent.click(screen.getByTestId('slot-item-helmet'))
     const reopenedDialog = screen.getByRole('dialog', { name: /equip face shield/i })
     expect(within(reopenedDialog).getByText('Equipped')).toBeInTheDocument()
-    expect(within(reopenedDialog).getByText(shieldName!)).toBeInTheDocument()
+    expect(within(reopenedDialog).getAllByText(shieldName!).length).toBeGreaterThan(0)
 
     fireEvent.click(within(reopenedDialog).getByRole('button', { name: /remove/i }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(within(screen.getByTestId('ground-loot-grid')).getByTestId(faceShieldTestId!)).toBeInTheDocument()
+    expect(within(screen.getByTestId('ground-loot-grid')).getByRole('button', { name: shieldName! })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('slot-item-helmet'))
     const dialogAfterRemoval = screen.getByRole('dialog', { name: /equip face shield/i })
@@ -92,27 +99,48 @@ describe('equipment screen shell', () => {
   })
 
   it('adds ground loot when the first bot dies', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     expect(screen.getByTestId('players-remaining')).toHaveTextContent('4 / 5 players remaining')
     expect(screen.getByTestId('ground-loot-grid')).toBeInTheDocument()
     expect(screen.getByTestId('item-bot-1-backpack')).toBeInTheDocument()
   })
 
   it('updates the elapsed timer while the run is active', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun()
     act(() => vi.advanceTimersByTime(3000))
     expect(screen.getByText('04:57')).toBeInTheDocument()
   })
 
   it('keeps selection feedback when a ground-loot item is selected', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     const backpack = screen.getByTestId('item-bot-1-backpack'); fireEvent.click(backpack)
     expect(backpack).toHaveClass('ground-loot-panel__item-card--selected')
     expect(screen.getByTestId('slot-target-backpack')).toHaveClass('equipment-screen__slot--valid')
   })
 
+  it('opens a tooltip upward for ground loot at the bottom of the scrollable stash', () => {
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+
+    const grid = screen.getByTestId('ground-loot-grid')
+    const item = screen.getByTestId('item-bot-1-backpack')
+    const tile = item.parentElement!
+
+    Object.defineProperties(grid, {
+      clientHeight: { configurable: true, value: 150 },
+      clientLeft: { configurable: true, value: 0 },
+      clientTop: { configurable: true, value: 0 },
+      clientWidth: { configurable: true, value: 300 },
+    })
+    vi.spyOn(grid, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 150))
+    vi.spyOn(tile, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 50, 50))
+
+    fireEvent.pointerEnter(tile)
+
+    expect(tile).toHaveAttribute('data-tooltip-vertical', 'top')
+  })
+
   it('moves selected ground loot to its first valid destination with F', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     fireEvent.click(screen.getByTestId('item-bot-1-backpack'))
     fireEvent.keyDown(window, { key: 'f' })
     expect(screen.queryByTestId('item-bot-1-backpack')).not.toBeInTheDocument()
@@ -122,7 +150,7 @@ describe('equipment screen shell', () => {
   })
 
   it('transitions to results when extracting', () => {
-    vi.useFakeTimers(); render(<App startSeed={7} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     fireEvent.click(screen.getByRole('button', { name: /extract now/i }))
     expect(screen.getByTestId('results-screen')).toBeInTheDocument()
     expect(screen.getByText(/Extraction successful/i)).toBeInTheDocument()

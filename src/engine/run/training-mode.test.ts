@@ -459,7 +459,10 @@ describe('training mode run state machine', () => {
     const afterFirstDrop = advanceToElapsed(started, 5)
     const lootSource = afterFirstDrop.lootSources[0]!
     const droppedBackpackId = lootSource.itemIds.find(
-      (itemId) => afterFirstDrop.inventory.itemInstances[itemId]?.itemDefinitionId === 'abi-backpack_001',
+      (itemId) => {
+        const item = afterFirstDrop.inventory.itemInstances[itemId]
+        return item && catalog.itemDefinitionsById[item.itemDefinitionId]?.category === 'backpack'
+      },
     )
 
     expect(droppedBackpackId).toBeDefined()
@@ -471,20 +474,35 @@ describe('training mode run state machine', () => {
     expect(lootSource.itemIds).toContain(droppedBackpackId!)
   })
 
-  it('drops a weapon and a backpack or tactical vest for every bot', () => {
-    const started = createStartedRun()
-    const afterAllDrops = advanceToElapsed(started, 40)
+  it('gives every bot the required equipment and one to five random items', () => {
     const weaponCategories = new Set(['weapon_primary', 'weapon_secondary', 'weapon_pistol'])
 
-    expect(afterAllDrops.lootSources).toHaveLength(5)
-    for (const lootSource of afterAllDrops.lootSources) {
-      const categories = lootSource.itemIds.map((itemId) => {
-        const item = afterAllDrops.inventory.itemInstances[itemId]
-        return item ? catalog.itemDefinitionsById[item.itemDefinitionId]?.category : undefined
-      })
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed }, catalog)
+      const afterAllDrops = advanceToElapsed(started, 40)
 
-      expect(categories.some((category) => category !== undefined && weaponCategories.has(category))).toBe(true)
-      expect(categories.some((category) => category === 'backpack' || category === 'vest_tactical')).toBe(true)
+      expect(afterAllDrops.lootSources).toHaveLength(5)
+      for (const lootSource of afterAllDrops.lootSources) {
+        const definitions = lootSource.itemIds.map((itemId) => {
+          const item = afterAllDrops.inventory.itemInstances[itemId]!
+          return catalog.itemDefinitionsById[item.itemDefinitionId]!
+        })
+        const categories = definitions.map((definition) => definition.category)
+        const helmet = definitions.find((definition) => definition.category === 'helmet')!
+        const equippedHeadsetId = `${lootSource.botId}-headset`
+        const hasBallisticRig = definitions.some((definition) =>
+          definition.id.includes('ballistic_rig') || definition.tags.includes('ballistic-vest-integrated'),
+        )
+
+        expect(categories.some((category) => weaponCategories.has(category))).toBe(true)
+        expect(categories).toContain('helmet')
+        expect(lootSource.itemIds.includes(equippedHeadsetId)).toBe(!helmet.tags.includes('blocks-headset'))
+        expect(categories).toContain('backpack')
+        expect(hasBallisticRig || (categories.includes('vest_ballistic') && categories.includes('vest_tactical'))).toBe(true)
+        expect(definitions.some((definition) => definition.tags.includes('pocket-holder'))).toBe(false)
+        expect(lootSource.itemIds.length).toBeGreaterThanOrEqual(5)
+        expect(lootSource.itemIds.length).toBeLessThanOrEqual(12)
+      }
     }
   })
 
@@ -658,7 +676,7 @@ describe('training mode run state machine', () => {
     const started = advanceTrainingRun(createTrainingRunState(catalog), { type: 'BEGIN_RUN', seed: 7 }, catalog)
     const afterFirstDrop = advanceTrainingRun(started, { type: 'ADVANCE_TIME', deltaSeconds: 5 }, catalog)
     const droppedBackpackId = afterFirstDrop.lootSources[0]?.itemIds.find((itemId) =>
-      afterFirstDrop.inventory.itemInstances[itemId]?.itemDefinitionId === 'abi-backpack_001',
+      catalog.itemDefinitionsById[afterFirstDrop.inventory.itemInstances[itemId]?.itemDefinitionId ?? '']?.category === 'backpack',
     )
 
     expect(droppedBackpackId).toBeDefined()

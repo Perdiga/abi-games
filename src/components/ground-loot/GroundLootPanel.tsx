@@ -38,15 +38,21 @@ const setTooltipSide = (tile: HTMLDivElement) => {
   const gridBounds = grid.getBoundingClientRect()
   const gridLeft = gridBounds.left + grid.clientLeft
   const gridRight = gridLeft + grid.clientWidth
+  const gridTop = gridBounds.top + grid.clientTop
+  const gridBottom = gridTop + grid.clientHeight
   const minSideSpace = 244
+  const minVerticalSpace = 100
   const side =
     gridRight - tileBounds.right >= minSideSpace
       ? 'right'
       : tileBounds.left - gridLeft >= minSideSpace
         ? 'left'
         : 'center'
+  const vertical =
+    gridBottom - tileBounds.bottom >= minVerticalSpace || tileBounds.top - gridTop < minVerticalSpace ? 'bottom' : 'top'
 
   tile.dataset.tooltipSide = side
+  tile.dataset.tooltipVertical = vertical
 }
 
 export function GroundLootPanel(props: GroundLootPanelProps) {

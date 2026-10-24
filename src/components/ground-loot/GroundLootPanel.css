@@ -262,6 +262,11 @@
   transform: translateX(-50%);
 }
 
+.ground-loot-panel__tile[data-tooltip-vertical='top'] .ground-loot-panel__tooltip {
+  top: auto;
+  bottom: calc(100% + 0.25rem);
+}
+
 .ground-loot-panel__tooltip-title,
 .ground-loot-panel__tooltip-row,
 .ground-loot-panel__tooltip-hint {
