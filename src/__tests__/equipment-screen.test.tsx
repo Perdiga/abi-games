@@ -111,6 +111,27 @@ describe('equipment screen shell', () => {
     expect(screen.getByTestId('slot-target-backpack')).toHaveClass('equipment-screen__slot--valid')
   })
 
+  it('opens a tooltip upward for ground loot at the bottom of the scrollable stash', () => {
+    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
+
+    const grid = screen.getByTestId('ground-loot-grid')
+    const item = screen.getByTestId('item-bot-1-backpack')
+    const tile = item.parentElement!
+
+    Object.defineProperties(grid, {
+      clientHeight: { configurable: true, value: 150 },
+      clientLeft: { configurable: true, value: 0 },
+      clientTop: { configurable: true, value: 0 },
+      clientWidth: { configurable: true, value: 300 },
+    })
+    vi.spyOn(grid, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 150))
+    vi.spyOn(tile, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 50, 50))
+
+    fireEvent.pointerEnter(tile)
+
+    expect(tile).toHaveAttribute('data-tooltip-vertical', 'top')
+  })
+
   it('moves selected ground loot to its first valid destination with F', () => {
     vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun(); advanceToFirstLootDrop()
     fireEvent.click(screen.getByTestId('item-bot-1-backpack'))
