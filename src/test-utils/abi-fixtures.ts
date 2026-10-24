@@ -39,7 +39,7 @@ export const createAbiTestCatalog = (): CatalogIndex => {
   const helmet = catalog.itemDefinitionsById['abi-helmet_001']!
   const rig = catalog.itemDefinitionsById['abi-ballistic_rig_001']!
   const vest = catalog.itemDefinitionsById['abi-chest_rig_002']!
-  catalog.itemDefinitionsById['abi-helmet_001'] = { ...helmet, tags: [...helmet.tags, 'blocks-headset'] }
+  catalog.itemDefinitionsById['abi-helmet_001'] = { ...helmet, tags: [...helmet.tags, 'blocks-headset', 'supports-face-shield'], shieldsCompatible: ['helmet_shield_001', 'abi-helmet_shield_001'] }
   catalog.itemDefinitionsById['abi-ballistic_rig_001'] = { ...rig, tags: [...rig.tags, 'ballistic-vest-integrated'] }
   catalog.itemDefinitionsById['abi-chest_rig_002'] = { ...vest, category: 'vest_ballistic', allowedEquipmentSlots: ['ballisticVest'], tags: [...vest.tags, 'ballistic-vest'] }
   const backpackState = catalog.itemStatesById['state-abi-backpack_018']!

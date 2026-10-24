@@ -72,6 +72,74 @@ describe('equipment rules', () => {
     expect(shieldEquip.ok).toBe(true)
   })
 
+  it('allows equipping a compatible face shield specified in shieldsCompatible', () => {
+    let state = createPlayerInventory()
+    const helmet = createItemInstance('abi-helmet_012', catalog, { id: 'helmet-f70', ownerEntityId: 'player' })
+    const compatibleShield = createItemInstance('abi-helmet_shield_001', catalog, {
+      id: 'shield-dk5',
+      ownerEntityId: 'player',
+    })
+
+    state = addItemInstance(addItemInstance(state, helmet, catalog), compatibleShield, catalog)
+    const helmetEquip = equipItemToSlot(state, helmet.id, 'helmet', catalog)
+    expect(helmetEquip.ok).toBe(true)
+
+    const shieldEquip = equipItemToSlot(
+      helmetEquip.ok ? helmetEquip.state : state,
+      compatibleShield.id,
+      'helmetFaceShield',
+      catalog,
+    )
+    expect(shieldEquip.ok).toBe(true)
+  })
+
+  it('prevents equipping an incompatible face shield when helmet supports other shields', () => {
+    let state = createPlayerInventory()
+    const helmet = createItemInstance('abi-helmet_012', catalog, { id: 'helmet-f70', ownerEntityId: 'player' })
+    const incompatibleShield = createItemInstance('abi-helmet_shield_002', catalog, {
+      id: 'shield-sh',
+      ownerEntityId: 'player',
+    })
+
+    state = addItemInstance(addItemInstance(state, helmet, catalog), incompatibleShield, catalog)
+    const helmetEquip = equipItemToSlot(state, helmet.id, 'helmet', catalog)
+    expect(helmetEquip.ok).toBe(true)
+
+    const shieldEquip = equipItemToSlot(
+      helmetEquip.ok ? helmetEquip.state : state,
+      incompatibleShield.id,
+      'helmetFaceShield',
+      catalog,
+    )
+    expect(shieldEquip.ok).toBe(false)
+    if (!shieldEquip.ok) {
+      expect(shieldEquip.reason).toContain('compatible helmet')
+    }
+  })
+
+  it('prevents equipping a face shield on a helmet that has an empty shieldsCompatible list', () => {
+    let state = createPlayerInventory()
+    const helmet = createItemInstance('abi-helmet_002', catalog, { id: 'helmet-no-shields', ownerEntityId: 'player' })
+    const shield = createItemInstance('abi-helmet_shield_001', catalog, {
+      id: 'shield-dk5',
+      ownerEntityId: 'player',
+    })
+
+    state = addItemInstance(addItemInstance(state, helmet, catalog), shield, catalog)
+    const helmetEquip = equipItemToSlot(state, helmet.id, 'helmet', catalog)
+    expect(helmetEquip.ok).toBe(true)
+
+    const shieldEquip = equipItemToSlot(
+      helmetEquip.ok ? helmetEquip.state : state,
+      shield.id,
+      'helmetFaceShield',
+      catalog,
+    )
+    expect(shieldEquip.ok).toBe(false)
+    if (!shieldEquip.ok) {
+      expect(shieldEquip.reason).toContain('compatible helmet')
+    }
+  })
   it('does not allow removing a helmet while its face shield is equipped', () => {
     let state = createPlayerInventory()
     const backpack = createItemInstance('backpack-split', catalog, { id: 'backpack', ownerEntityId: 'player' })

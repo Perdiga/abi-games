@@ -79,6 +79,7 @@ export interface ItemDefinition {
   tags: readonly string[]
   defaultStateId: string
   allowRotation: boolean
+  shieldsCompatible?: readonly string[]
 }
 
 export interface EquipmentSlotDefinition {
@@ -139,6 +140,15 @@ export interface RuleViolation {
 }
 
 export type RuleDefinition =
+  | {
+      id: string
+      priority: number
+      kind: 'requires-compatible-face-shield'
+      subjectSlots: readonly EquipmentSlotId[]
+      requiredHostSlot: EquipmentSlotId
+      effect: 'deny'
+      message: string
+    }
   | {
       id: string
       priority: number
