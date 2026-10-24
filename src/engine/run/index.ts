@@ -184,7 +184,9 @@ const createRandomBotLoadout = (
   botId: string,
 ): BotLoadoutTemplate => {
   const equipment: Partial<Record<EquipmentSlotId, string>> = {}
-  const availableDefinitionIds = catalog.itemDefinitions.map((definition) => definition.id)
+  const availableDefinitionIds = catalog.itemDefinitions
+    .filter((definition) => !definition.tags.includes('pocket-holder'))
+    .map((definition) => definition.id)
   const loot: string[] = []
   const takeRandom = (definitionIds: readonly string[]) => {
     const candidates = definitionIds.filter((definitionId) => availableDefinitionIds.includes(definitionId))

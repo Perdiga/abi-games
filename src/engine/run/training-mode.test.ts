@@ -499,6 +499,7 @@ describe('training mode run state machine', () => {
         expect(lootSource.itemIds.includes(equippedHeadsetId)).toBe(!helmet.tags.includes('blocks-headset'))
         expect(categories).toContain('backpack')
         expect(hasBallisticRig || (categories.includes('vest_ballistic') && categories.includes('vest_tactical'))).toBe(true)
+        expect(definitions.some((definition) => definition.tags.includes('pocket-holder'))).toBe(false)
         expect(lootSource.itemIds.length).toBeGreaterThanOrEqual(5)
         expect(lootSource.itemIds.length).toBeLessThanOrEqual(12)
       }

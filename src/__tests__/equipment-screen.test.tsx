@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { CompartmentGrid } from '../components/grids/CompartmentGrid'
 import type { GridLayout } from '../components/grids/types'
-import { createCatalogIndex } from '../data'
 
 const testLayout: GridLayout = {
   id: 'test-layout', label: 'Test Layout', width: 5, height: 3,
@@ -51,29 +50,31 @@ describe('equipment screen shell', () => {
   })
 
   it('opens face-shield options from a compatible helmet and equips the selected shield', () => {
-    vi.useFakeTimers(); render(<App startSeed={12} tickIntervalMs={1000} />); startRun()
+    vi.useFakeTimers(); render(<App startSeed={1} tickIntervalMs={1000} />); startRun()
     act(() => vi.advanceTimersByTime(40000))
 
     const groundItems = screen.getAllByTestId(/^item-/)
-    const compatibleHelmetNames = new Set(
-      createCatalogIndex().itemDefinitions
-        .filter((definition) => definition.category === 'helmet' && (definition.shieldsCompatible?.length ?? 0) > 0)
-        .map((definition) => definition.name),
-    )
-    const helmet = groundItems.find((item) => compatibleHelmetNames.has(item.getAttribute('aria-label') ?? ''))
-    const faceShield = groundItems.find((item) => /face shield|protetor facial|visor/i.test(item.getAttribute('aria-label') ?? ''))
-    expect(helmet).toBeDefined()
-    expect(faceShield).toBeDefined()
-    const faceShieldTestId = faceShield!.getAttribute('data-testid')
+    const helmets = groundItems.filter((item) => /helmet|capacete/i.test(item.getAttribute('aria-label') ?? ''))
+    let shieldOption: HTMLElement | undefined
 
-    fireEvent.click(helmet!)
-    fireEvent.click(document.querySelector('[data-slot-id="helmet"]')!)
-    fireEvent.click(screen.getByTestId('slot-item-helmet'))
+    for (const helmet of helmets) {
+      fireEvent.click(helmet)
+      fireEvent.click(document.querySelector('[data-slot-id="helmet"]')!)
+      const equippedHelmet = screen.queryByTestId('slot-item-helmet')
+      if (!equippedHelmet) continue
 
-    const dialog = screen.getByRole('dialog', { name: /equip face shield/i })
-    const shieldOption = within(dialog)
-      .getAllByRole('button')
-      .find((button) => button.classList.contains('equipment-screen__face-shield-option'))
+      fireEvent.click(equippedHelmet)
+      const dialog = screen.queryByRole('dialog', { name: /equip face shield/i })
+      if (!dialog) continue
+
+      shieldOption = within(dialog)
+        .getAllByRole('button')
+        .find((button) => button.classList.contains('equipment-screen__face-shield-option'))
+      if (shieldOption) break
+
+      fireEvent.click(within(dialog).getByRole('button', { name: /close/i }))
+    }
+
     expect(shieldOption).toBeDefined()
 
     const shieldName = shieldOption!.querySelector('strong')?.textContent
@@ -89,7 +90,7 @@ describe('equipment screen shell', () => {
 
     fireEvent.click(within(reopenedDialog).getByRole('button', { name: /remove/i }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(within(screen.getByTestId('ground-loot-grid')).getByTestId(faceShieldTestId!)).toBeInTheDocument()
+    expect(within(screen.getByTestId('ground-loot-grid')).getByRole('button', { name: shieldName! })).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('slot-item-helmet'))
     const dialogAfterRemoval = screen.getByRole('dialog', { name: /equip face shield/i })
