@@ -3,6 +3,7 @@ import { type CatalogIndex } from '../../data'
 import { abiCompartmentId, abiDefinitionId, abiPlacement, createAbiTestCatalog } from '../../test-utils/abi-fixtures'
 import {
   addItemInstance,
+  changeItemState,
   createEmptyInventoryState,
   createItemInstance as createCatalogItemInstance,
   equipItemToSlot,
@@ -317,6 +318,17 @@ describe('training mode run state machine', () => {
     inventory = expectSuccessfulEquip(inventory, 'backpack', 'backpack')
     inventory = expectSuccessfulEquip(inventory, 'helmet', 'helmet')
     inventory = expectSuccessfulEquip(inventory, 'pistol', 'pistol')
+
+    for (const itemId of ['tactical', 'ballistic']) {
+      const definitionId = inventory.itemInstances[itemId]?.itemDefinitionId
+      const openState = catalog.itemStates.find(
+        (state) => state.itemDefinitionId === definitionId && state.tags.includes('state-open'),
+      )
+      expect(openState).toBeDefined()
+      const opened = changeItemState(inventory, itemId, openState!.id, catalog)
+      expect(opened.ok).toBe(true)
+      if (opened.ok) inventory = opened.state
+    }
 
     const pocketsStorage = getStorageUnitForItem(inventory, 'pockets')
     const tacticalStorage = getStorageUnitForItem(inventory, 'tactical')

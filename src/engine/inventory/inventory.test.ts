@@ -4,6 +4,7 @@ import { abiCompartmentId, abiDefinitionId, abiPlacement, createAbiTestCatalog }
 import {
   addStorageUnit,
   addItemInstance,
+  changeItemState,
   createEmptyInventoryState,
   createItemInstance as createCatalogItemInstance,
   createVirtualStorageUnit,
@@ -105,6 +106,111 @@ describe('inventory placement flows', () => {
     expect(rotated.ok).toBe(true)
     if (rotated.ok) {
       expect(rotated.state.itemInstances[backpack.id]?.rotation).toBe(90)
+    }
+  })
+
+  it('rejects placement into a closed container', () => {
+    let state = createEmptyInventoryState(catalog)
+    const backpack = createItemInstance('backpack-split', catalog, {
+      id: 'closed-backpack',
+      ownerEntityId: 'player',
+      stateId: 'state-abi-backpack_018-collapsed',
+    })
+    const radio = createItemInstance('misc-radio', catalog, { id: 'radio', ownerEntityId: 'player' })
+    const storageUnit = {
+      id: 'closed-backpack::storage',
+      itemInstanceId: backpack.id,
+      kind: 'item' as const,
+      label: 'Closed backpack storage',
+      layoutId: 'layout-abi-backpack_018',
+      ownerEntityId: 'player',
+    }
+    state = addItemInstance(addItemInstance(state, backpack, catalog), radio, catalog)
+    state = addStorageUnit(state, storageUnit, true)
+
+    const result = placeItemInStorage(
+      state,
+      {
+        itemInstanceId: radio.id,
+        targetStorageUnitId: storageUnit.id,
+        targetCompartmentId: 'bp-example-top',
+        x: 0,
+        y: 0,
+      },
+      catalog,
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toContain('Open the target rig or backpack')
+    }
+  })
+
+  it('creates the Universal B3 chest rig closed, without internal storage', () => {
+    let state = createEmptyInventoryState(catalog)
+    const rig = createCatalogItemInstance('abi-chest_rig_011', catalog, {
+      id: 'universal-b3',
+      ownerEntityId: 'player',
+    })
+
+    state = addItemInstance(state, rig, catalog)
+
+    expect(catalog.itemStatesById[rig.stateId]?.tags).toContain('state-collapsed')
+    expect(getStorageUnitForItem(state, rig.id)).toBeUndefined()
+  })
+
+  it('rejects opening a chest rig when its expanded dimensions do not fit', () => {
+    const tightCatalog = createAbiTestCatalog()
+    tightCatalog.layoutsById['layout-tight'] = {
+      id: 'layout-tight',
+      name: 'Tight storage',
+      boundingWidth: 3,
+      boundingHeight: 2,
+      compartmentIds: ['tight-compartment'],
+      supportsIrregularGeometry: false,
+    }
+    tightCatalog.compartmentsById['tight-compartment'] = {
+      id: 'tight-compartment',
+      layoutId: 'layout-tight',
+      label: 'Tight compartment',
+      originX: 0,
+      originY: 0,
+      shapeMask: ['111', '111'],
+      boundingWidth: 3,
+      boundingHeight: 2,
+      sortOrder: 1,
+    }
+
+    let state = createEmptyInventoryState(tightCatalog)
+    const rig = createCatalogItemInstance('abi-chest_rig_011', tightCatalog, {
+      id: 'universal-b3',
+      ownerEntityId: 'player',
+    })
+    const storageUnit = createVirtualStorageUnit({
+      id: 'tight-storage',
+      ownerEntityId: 'player',
+      layoutId: 'layout-tight',
+      label: 'Tight storage',
+    })
+    state = addStorageUnit(addItemInstance(state, rig, tightCatalog), storageUnit, true)
+    const placed = placeCatalogItemInStorage(
+      state,
+      {
+        itemInstanceId: rig.id,
+        targetStorageUnitId: storageUnit.id,
+        targetCompartmentId: 'tight-compartment',
+        x: 0,
+        y: 0,
+      },
+      tightCatalog,
+    )
+    expect(placed.ok).toBe(true)
+    if (!placed.ok) return
+
+    const opened = changeItemState(placed.state, rig.id, 'state-abi-chest_rig_011', tightCatalog)
+    expect(opened.ok).toBe(false)
+    if (!opened.ok) {
+      expect(opened.reason).toContain('does not fit')
     }
   })
 

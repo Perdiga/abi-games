@@ -332,8 +332,7 @@ const parseSlotMatrix = (item: AbiAssetItem): SlotMatrix | null => {
 const externalLayoutIdFor = (item: AbiAssetItem): string | undefined =>
   parseSlotMatrix(item) ? `layout-abi-${item.id}` : undefined
 
-const hasOpenBackpackState = (item: AbiAssetItem): boolean =>
-  item.type === 'backpack' &&
+const hasOpenContainerState = (item: AbiAssetItem): boolean =>
   item.widthSlotsOpen !== null &&
   item.heightSlotsOpen !== null &&
   externalLayoutIdFor(item) !== undefined
@@ -395,6 +394,7 @@ const externalContainerCompartments: readonly ContainerCompartmentDefinition[] =
 const externalItemDefinitions: readonly ItemDefinition[] = abiAssetItems.map((item) => {
   const config = getExternalItemConfig(item)
   const containerLayoutId = externalLayoutIdFor(item)
+  const startsClosed = hasOpenContainerState(item) && item.type !== 'backpack'
   return {
     id: `abi-${item.id}`,
     name: item.name,
@@ -403,7 +403,7 @@ const externalItemDefinitions: readonly ItemDefinition[] = abiAssetItems.map((it
     baseValue: item.price ?? 0,
     allowedEquipmentSlots: config.allowedEquipmentSlots,
     tags: externalItemTags(item, containerLayoutId),
-    defaultStateId: `state-abi-${item.id}`,
+    defaultStateId: startsClosed ? `state-abi-${item.id}-collapsed` : `state-abi-${item.id}`,
     allowRotation: !containerLayoutId,
     shieldsCompatible: item.shieldsCompatible ?? undefined,
   }
@@ -411,20 +411,20 @@ const externalItemDefinitions: readonly ItemDefinition[] = abiAssetItems.map((it
 
 const externalItemStates: readonly ItemStateDefinition[] = abiAssetItems.flatMap((item) => {
   const containerLayoutId = externalLayoutIdFor(item)
-  const isOpenBackpack = hasOpenBackpackState(item)
+  const isOpenContainer = hasOpenContainerState(item)
   const openState = itemState({
     id: `state-abi-${item.id}`,
     itemDefinitionId: `abi-${item.id}`,
-    label: isOpenBackpack ? 'open' : 'default',
-    shapeMask: toShapeMask(item, isOpenBackpack),
+    label: isOpenContainer ? 'open' : 'default',
+    shapeMask: toShapeMask(item, isOpenContainer),
     equippable: true,
     storable: true,
     containerLayoutId,
-    uiLabel: isOpenBackpack ? 'Open' : undefined,
-    tags: isOpenBackpack ? ['state-open', 'default'] : ['default'],
+    uiLabel: isOpenContainer ? 'Open' : undefined,
+    tags: isOpenContainer ? ['state-open', 'default'] : ['default'],
   })
 
-  if (!isOpenBackpack) {
+  if (!isOpenContainer) {
     return [openState]
   }
 
@@ -435,7 +435,7 @@ const externalItemStates: readonly ItemStateDefinition[] = abiAssetItems.flatMap
       itemDefinitionId: `abi-${item.id}`,
       label: 'collapsed',
       shapeMask: toShapeMask(item),
-      equippable: false,
+      equippable: item.type !== 'backpack',
       storable: true,
       uiLabel: 'Collapsed',
       tags: ['state-collapsed'],
