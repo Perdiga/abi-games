@@ -6,6 +6,7 @@ import type {
   EquipmentSlotDefinition,
   EquipmentSlotId,
   ItemDefinition,
+  ItemRarity,
   ItemStateDefinition,
   RuleDefinition,
   RunDefinition,
@@ -261,6 +262,7 @@ const baseItemDefinitions: readonly ItemDefinition[] = [
     id: 'pockets-standard',
     name: 'Placeholder Standard Pockets',
     category: 'container_misc',
+    rarity: 'common',
     baseValue: 0,
     allowedEquipmentSlots: ['pockets'],
     tags: ['holder-shell', 'pocket-holder'],
@@ -294,6 +296,11 @@ const EXTERNAL_ITEM_CONFIG: Readonly<Record<string, ExternalItemConfig>> = {
 
 const getExternalItemConfig = (item: AbiAssetItem): ExternalItemConfig =>
   EXTERNAL_ITEM_CONFIG[item.type] ?? { category: 'container_misc', allowedEquipmentSlots: [] }
+
+const RARITIES: readonly ItemRarity[] = ['common', 'rare', 'epic', 'legendary', 'mythic']
+
+const getItemRarity = (rarity: string | null | undefined): ItemRarity =>
+  RARITIES.includes(rarity as ItemRarity) ? (rarity as ItemRarity) : 'common'
 
 const toShapeMask = (item: AbiAssetItem, open = false): ShapeMask => {
   const width = Math.max(1, Math.min((open ? item.widthSlotsOpen : item.widthSlots) ?? item.widthSlots ?? 1, 6))
@@ -392,6 +399,7 @@ const externalItemDefinitions: readonly ItemDefinition[] = abiAssetItems.map((it
     id: `abi-${item.id}`,
     name: item.name,
     category: config.category,
+    rarity: getItemRarity(item.rarity),
     baseValue: item.price ?? 0,
     allowedEquipmentSlots: config.allowedEquipmentSlots,
     tags: externalItemTags(item, containerLayoutId),

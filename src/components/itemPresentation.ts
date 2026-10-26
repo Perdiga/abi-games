@@ -1,4 +1,4 @@
-import type { EquipmentSlotId, ItemCategory } from '../data'
+import type { EquipmentSlotId, ItemCategory, ItemRarity } from '../data'
 import { abiAssetById } from '../data/abi-assets.generated'
 import type { InventoryItemRecord } from './grids/types'
 
@@ -38,22 +38,12 @@ const CATEGORY_GLYPHS: Record<ItemCategory, string> = {
   container_misc: '⌂',
 }
 
-const CATEGORY_TINTS: Record<ItemCategory, string> = {
-  helmet: '#3d434d',
-  face_shield: '#434951',
-  mask: '#4b443a',
-  headset: '#384146',
-  weapon_primary: '#69292a',
-  weapon_secondary: '#7a3527',
-  weapon_pistol: '#643036',
-  vest_tactical: '#314432',
-  vest_ballistic: '#474031',
-  backpack: '#374b35',
-  ammo: '#5b3432',
-  ammo_box: '#51413a',
-  medkit: '#6f5822',
-  consumable: '#645124',
-  container_misc: '#5a4a22',
+const RARITY_TINTS: Record<ItemRarity, string> = {
+  common: '#696764',
+  rare: '#356E8F',
+  epic: '#7553A6',
+  legendary: '#B37224',
+  mythic: '#311410',
 }
 
 const WEAPON_SLOT_BADGES: Partial<Record<EquipmentSlotId, string>> = {
@@ -62,25 +52,7 @@ const WEAPON_SLOT_BADGES: Partial<Record<EquipmentSlotId, string>> = {
   pistol: '3',
 }
 
-export const getItemTint = (item: InventoryItemRecord): string => {
-  if (item.tags.includes('weapon') || item.tags.includes('ammo')) {
-    return '#6d2a2b'
-  }
-
-  if (item.tags.includes('medical') || item.category === 'medkit' || item.category === 'consumable') {
-    return '#715924'
-  }
-
-  if (item.tags.includes('holder-shell') || item.category === 'backpack') {
-    return '#344734'
-  }
-
-  if (item.tags.includes('misc')) {
-    return '#675623'
-  }
-
-  return CATEGORY_TINTS[item.category] ?? '#3f4248'
-}
+export const getItemTint = (item: InventoryItemRecord): string => RARITY_TINTS[item.rarity ?? 'common']
 
 export const getItemGlyph = (item: InventoryItemRecord): string =>
   CATEGORY_GLYPHS[item.category] ?? item.name.slice(0, 1)
