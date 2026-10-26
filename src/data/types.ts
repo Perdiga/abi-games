@@ -1,6 +1,8 @@
 export type Rotation = 0 | 90 | 180 | 270
 export type ShapeMask = readonly string[]
 
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
+
 export type ItemCategory =
   | 'helmet'
   | 'face_shield'
@@ -71,6 +73,7 @@ export interface ItemDefinition {
   id: string
   name: string
   category: ItemCategory
+  rarity?: ItemRarity
   subtype?: string
   baseValue: number
   durabilityType?: string

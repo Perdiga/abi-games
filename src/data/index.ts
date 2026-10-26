@@ -28,6 +28,7 @@ export type {
   InventoryState,
   ItemCategory,
   ItemDefinition,
+  ItemRarity,
   ItemInstance,
   ItemStateDefinition,
   LootSource,

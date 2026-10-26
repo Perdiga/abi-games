@@ -282,8 +282,8 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
       event.preventDefault()
       if (key === 'r') {
         handleRotateSelectedItem()
-      } else if (draggedItemId && selectedItem?.category === 'backpack') {
-        handleToggleSelectedBackpack()
+      } else if (draggedItemId && selectedItem?.availableStateIds.length && selectedItem.availableStateIds.length > 1) {
+        handleToggleSelectedContainer()
       } else {
         handleMoveSelectedGroundItem()
       }
@@ -458,8 +458,8 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     setStatusMessage(`${selectedItem.name} rotated to ${nextRotation}°.`)
   }
 
-  function handleToggleSelectedBackpack() {
-    if (selectedItem?.category !== 'backpack') {
+  function handleToggleSelectedContainer() {
+    if (!selectedItem || selectedItem.availableStateIds.length < 2) {
       return
     }
 
@@ -478,7 +478,7 @@ export function EquipmentScreen({ state, dispatch }: EquipmentScreenProps) {
     const validation = toPlacementValidation(validateSetTrainingItemState(state, action))
 
     if (!validation?.valid) {
-      setStatusMessage(validation?.reason ?? `This backpack cannot be ${currentIsOpen ? 'closed' : 'opened'} right now.`)
+      setStatusMessage(validation?.reason ?? `This container cannot be ${currentIsOpen ? 'closed' : 'opened'} right now.`)
       return
     }
 

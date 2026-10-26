@@ -364,6 +364,15 @@ const applyMove = (
     return fail(`Unknown target storage "${action.targetStorageUnitId}".`)
   }
 
+  if (targetStorageUnit.itemInstanceId) {
+    const targetContainer = state.itemInstances[targetStorageUnit.itemInstanceId]
+    const targetContainerState = targetContainer ? catalog.itemStatesById[targetContainer.stateId] : undefined
+
+    if (!targetContainerState?.containerLayoutId || targetContainerState.containerLayoutId !== targetStorageUnit.layoutId) {
+      return fail('Open the target rig or backpack before placing items inside it.')
+    }
+  }
+
   if (!targetCompartment || targetCompartment.layoutId !== targetStorageUnit.layoutId) {
     return fail('That compartment does not belong to the selected container.')
   }

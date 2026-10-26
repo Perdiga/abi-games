@@ -7,6 +7,7 @@ import {
   type EquipmentSlotId,
   type InventoryOperationFailure,
   type ItemDefinition,
+  type ItemRarity,
   type ItemInstance,
   type ItemStateDefinition,
   type LootSource,
@@ -121,6 +122,7 @@ export interface TrainingModeItemView {
   stateId: string
   name: string
   category: ItemDefinition['category']
+  rarity: ItemRarity
   baseValue: number
   tags: readonly string[]
   shapeMask: readonly string[]
@@ -979,6 +981,7 @@ const buildItemView = (
     stateId: item.stateId,
     name: definition.name,
     category: definition.category,
+    rarity: definition.rarity ?? 'common',
     baseValue: definition.baseValue,
     tags: definition.tags,
     shapeMask: itemState.shapeMask,

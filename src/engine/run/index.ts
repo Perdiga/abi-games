@@ -393,6 +393,7 @@ const spawnLootDrop = (state: TrainingRunState, botId: string, catalog: CatalogI
         inventory = collapsed.state
       }
     }
+
   }
 
   const lootSource: LootSource = {
